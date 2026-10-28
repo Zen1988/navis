@@ -1,4 +1,44 @@
-# Navis
+<svg width="1200" height="260" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="260" fill="#FFFFFF"/>
+
+  <g transform="translate(80,30)">
+    <circle cx="100" cy="100" r="80"
+      fill="none"
+      stroke="#2563EB"
+      stroke-width="8"/>
+
+    <line x1="100" y1="40" x2="100" y2="160"
+      stroke="#0F172A"
+      stroke-width="6"/>
+
+    <line x1="40" y1="100" x2="160" y2="100"
+      stroke="#0F172A"
+      stroke-width="6"/>
+
+    <polygon points="100,20 82,55 118,55"
+      fill="#0EA5E9"/>
+
+    <circle cx="100" cy="100" r="18"
+      fill="#0F172A"/>
+  </g>
+
+  <text x="260"
+        y="110"
+        font-size="72"
+        font-family="Segoe UI, Arial, sans-serif"
+        font-weight="700"
+        fill="#0F172A">
+    Navis
+  </text>
+
+  <text x="260"
+        y="165"
+        font-size="28"
+        font-family="Segoe UI, Arial, sans-serif"
+        fill="#475569">
+    Understand Every Path
+  </text>
+</svg>
 
 > Understand Every Path.
 
