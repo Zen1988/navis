@@ -62,7 +62,7 @@ def process_submission(connection_factory, submission_id):
             devices = [r[0] for r in cur.fetchall()]
             if len(devices) != 1 or (claimed is not None and claimed != devices[0]):
                 raise ValueError("device identity requires confirmation")
-            supported = kind in ("mac", "route", "policy", "interface", "neighbor", "nat")
+            supported = kind in ("mac", "route", "policy", "interface", "neighbor", "nat", "security_zone")
             entries = normalized_adapter.normalize(kind, payload) if supported else []
             batch, snapshot, run = uuid4(), uuid4(), uuid4()
             cur.execute("INSERT INTO navis.import_batch(id,source_system_id,status) VALUES (%s,%s,'processed')", (batch, source))
@@ -95,6 +95,19 @@ def process_submission(connection_factory, submission_id):
                     for address in entry["addresses"]:
                         cur.execute("INSERT INTO navis.interface_address(id,interface_id,address) VALUES (%s,%s,%s)", (uuid4(), interfaces[native_id], address))
             for entry in entries:
+                if kind == "security_zone":
+                    point = entry["enforcement_point"]
+                    if point not in points:
+                        points[point] = uuid4()
+                        cur.execute("INSERT INTO navis.enforcement_point(id,snapshot_id,native_id,kind) VALUES (%s,%s,%s,'unknown')", (points[point], snapshot, point))
+                    zone = uuid4()
+                    cur.execute("INSERT INTO navis.security_zone(id,enforcement_point_id,native_id,name) VALUES (%s,%s,%s,%s)", (zone, points[point], entry["zone"], entry["zone"]))
+                    for name in entry["interfaces"]:
+                        if name not in interfaces:
+                            interfaces[name] = uuid4()
+                            cur.execute("INSERT INTO navis.interface(id,snapshot_id,normalization_run_id,native_id,name,kind) VALUES (%s,%s,%s,%s,%s,'unknown')", (interfaces[name], snapshot, run, name, name))
+                        cur.execute("INSERT INTO navis.security_zone_member(security_zone_id,interface_id) VALUES (%s,%s)", (zone, interfaces[name]))
+                    continue
                 if kind == "interface":
                     continue
                 if kind in ("mac", "route", "neighbor"):
@@ -138,7 +151,8 @@ def process_submission(connection_factory, submission_id):
                     if rulesets[key][1] != entry["default_action"]:
                         raise ValueError("conflicting rule set defaults")
                     policy_id = uuid4()
-                    cur.execute("INSERT INTO navis.policy_rule(id,rule_set_id,native_rule_id,position,action,enabled,details) VALUES (%s,%s,%s,%s,%s,%s,%s)", (policy_id, rulesets[key][0], entry["rule_id"], entry["position"], entry["action"], entry["enabled"], Jsonb({"selectors_complete": False})))
+                    details = {**entry.get("details", {}), "selectors_complete": False}
+                    cur.execute("INSERT INTO navis.policy_rule(id,rule_set_id,native_rule_id,position,action,enabled,details) VALUES (%s,%s,%s,%s,%s,%s,%s)", (policy_id, rulesets[key][0], entry["rule_id"], entry["position"], entry["action"], entry["enabled"], Jsonb(details)))
                     _write_selectors(cur, snapshot, points[point], policy_id, entry["selectors"], True)
             cur.execute("UPDATE navis.ingestion_submission SET status=%s, snapshot_id=%s WHERE id=%s", ("processed" if supported else "raw_only", snapshot, submission_id))
     return snapshot

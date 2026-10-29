@@ -29,7 +29,12 @@ class PostgresTraceSessions:
                 cur.execute("""INSERT INTO navis.trace_session
                     (id,consumer_id,caller_session_id,graph_build_id,request,result,expires_at)
                     VALUES (%s,%s,%s,%s,%s,%s,now()+%s)""", (session_id, consumer, caller_session_id, graph_build_id, Jsonb(request), Jsonb(result), self.lifetime))
-                cur.execute("INSERT INTO navis.trace_recommendation_draft(id,trace_session_id,status) VALUES (%s,%s,'pending')", (uuid4(), session_id))
+                drafts = [draft for flow in result.get("results", []) for hop in flow.get("hops", []) for draft in hop.get("recommendations", [])]
+                if drafts:
+                    for draft in drafts:
+                        cur.execute("INSERT INTO navis.trace_recommendation_draft(id,trace_session_id,status,recommendation) VALUES (%s,%s,'ready',%s)", (uuid4(), session_id, Jsonb(draft)))
+                else:
+                    cur.execute("INSERT INTO navis.trace_recommendation_draft(id,trace_session_id,status) VALUES (%s,%s,'unavailable')", (uuid4(), session_id))
         return session_id
 
     def recommendations(self, principal, caller_session_id):
@@ -43,4 +48,5 @@ class PostgresTraceSessions:
                 rows = cur.fetchall()
                 if not rows:
                     raise LookupError("session not found or expired")
-                return {"code": "RECOMMENDATION_PENDING" if any(row[1] == "pending" for row in rows) else "RECOMMENDATIONS_AVAILABLE", "caller_session_id": caller_session_id, "trace_session_id": str(rows[0][0]), "recommendations": [{"status": row[1], "result": row[2]} for row in rows]}
+                code = "RECOMMENDATION_PENDING" if any(row[1] == "pending" for row in rows) else ("RECOMMENDATIONS_AVAILABLE" if any(row[1] == "ready" for row in rows) else "RECOMMENDATIONS_UNAVAILABLE")
+                return {"code": code, "caller_session_id": caller_session_id, "trace_session_id": str(rows[0][0]), "recommendations": [{"status": row[1], "result": row[2]} for row in rows]}

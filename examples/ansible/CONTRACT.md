@@ -1,6 +1,6 @@
 # Collector to Navis contract
 
-Discovery and submission are separate steps. The vendor examples in README identify resources to fetch; they do not transform vendor data. `submit_normalized.yml` is a fixture demonstrating the actual interface ingestion envelope. Credentials for each system remain on the collector.
+Discovery, adaptation and submission are separate steps. Collectors gather native vendor data; vendor-specific adapters interpret it and produce the Navis normalized model. Playbooks and their callers are not expected to hand-map vendor semantics. Some examples are still collection-only; the ACI collector-side adapter is implemented partially. `submit_normalized.yml` is a fixture demonstrating the interface ingestion envelope. Credentials for each system remain on the collector.
 
 The configured ingestion service requires a bearer token with `inventory:write`, an active issuer-bound consumer, and `consumer_data_scope` permission for the source namespace. A successful staging response is HTTP 202:
 

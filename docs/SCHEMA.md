@@ -106,4 +106,10 @@ Hashes establish integrity only when the expected digest and approval process ar
 
 ## Design boundaries before implementation
 
+Migration 011 records normalized policy statefulness and adapter-provided session semantics per rule set. Stateful return traffic may be treated as permitted only when the adapter establishes the relevant session behavior; stateless enforcement requires a separate reverse-flow evaluation. Routing and NAT must also support the return path. The trace does not yet perform reverse-flow analysis.
+
+Migration 012 defines optional externally observed NAT session evidence. Packet tuples, observation time, expiry, source and rule reference preserve provenance; a configuration-derived translation is not proof of a live session. The trace checks exact observed tuples but does not use them to verify return routing. Snapshot ownership constraints and ingestion for this record remain to be implemented. Session evidence is read separately from the original trace transaction and is not included in the graph evidence manifest.
+
+Kubernetes-style endpoint enforcement requires independently scoped source egress and destination ingress decisions. Native Kubernetes NetworkPolicy selection, additive rule semantics, namespace/pod selectors, IP blocks, and implementation-specific behavior must be interpreted by a dedicated adapter; the directional combiner accepts only normalized decisions. An HTTP Ingress resource is a separate application routing construct and is not equivalent to an ingress NetworkPolicy. The current relational schema and trace do not yet capture all endpoint selectors or connect directional policy evaluation to the API.
+
 Define deletion and retention policy, temporal identity matching, snapshot consistency, tenant or namespace boundaries, access-token validation, and exact vendor semantics before deploying a migration. Validate representative cases: overlapping VRFs, longest-prefix matching, NAT before and after enforcement, policy defaults, incomplete snapshots, multiple paths, and graph rebuilds. The system should return unknown when evidence is insufficient.

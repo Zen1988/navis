@@ -7,8 +7,8 @@ from ipaddress import ip_address, ip_network
 from navis_common.mac import normalize_mac
 
 
-def validate_selectors(selectors):
-    if not isinstance(selectors, list) or not selectors:
+def validate_selectors(selectors, *, allow_empty=False):
+    if not isinstance(selectors, list) or (not selectors and not allow_empty):
         raise ValueError("selectors must be a nonempty list; use explicit any selectors")
     roles = {"source", "destination", "service", "source_zone", "destination_zone", "interface"}
     for selector in selectors:
@@ -39,7 +39,7 @@ def validate_selectors(selectors):
 
 
 def normalize(data_type, payload):
-    if data_type not in ("mac", "route", "policy", "interface", "neighbor", "nat"):
+    if data_type not in ("mac", "route", "policy", "interface", "neighbor", "nat", "security_zone"):
         raise ValueError("unsupported data type")
     if set(payload) != {"entries"} or not isinstance(payload["entries"], list):
         raise ValueError("payload must contain only an entries array")
@@ -47,7 +47,11 @@ def normalize(data_type, payload):
     for item in payload["entries"]:
         if not isinstance(item, dict):
             raise ValueError("entries must be objects")
-        if data_type == "interface":
+        if data_type == "security_zone":
+            if set(item) != {"enforcement_point", "zone", "interfaces"} or not all(isinstance(item[x], str) and item[x].strip() for x in ("enforcement_point", "zone")) or not isinstance(item["interfaces"], list) or any(not isinstance(x, str) or not x.strip() for x in item["interfaces"]):
+                raise ValueError("security zone requires enforcement_point, zone and interface IDs")
+            output.append(item.copy())
+        elif data_type == "interface":
             required = {"name", "kind", "addresses"}
             allowed = required | {"native_id", "parent", "vrf", "operational_state", "vlans", "config"}
             if not required <= set(item) or set(item) - allowed or not isinstance(item["name"], str) or not item["name"].strip() or not isinstance(item["kind"], str) or not item["kind"].strip() or not isinstance(item["addresses"], list):
@@ -91,13 +95,15 @@ def normalize(data_type, payload):
             output.append({**item, "destination": str(prefix), "next_hop": str(hop)})
         elif data_type == "policy":
             required = {"enforcement_point", "rule_set", "default_action", "rule_id", "position", "action", "enabled", "selectors"}
-            if set(item) != required or any(not isinstance(item[x], str) or not item[x].strip() for x in ("enforcement_point", "rule_set", "rule_id")):
+            if not required <= set(item) or set(item) - (required | {"details"}) or any(not isinstance(item[x], str) or not item[x].strip() for x in ("enforcement_point", "rule_set", "rule_id")):
                 raise ValueError("invalid policy entry")
+            if "details" in item and not isinstance(item["details"], dict):
+                raise ValueError("policy details must be an object")
             if item["default_action"] not in ("allow", "deny", "unknown") or item["action"] not in ("allow", "deny", "unknown"):
                 raise ValueError("invalid policy action")
             if not isinstance(item["position"], int) or isinstance(item["position"], bool) or item["position"] < 0 or not isinstance(item["enabled"], bool):
                 raise ValueError("invalid policy position or enabled flag")
-            validate_selectors(item["selectors"])
+            validate_selectors(item["selectors"], allow_empty=True)
             output.append(item.copy())
         else:
             raise ValueError("unsupported data type")

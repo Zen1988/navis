@@ -1,0 +1,29 @@
+---
+- name: Query pages for {{ aci_class }}
+  cisco.aci.aci_rest:
+    host: "{{ apic_host }}"
+    username: "{{ apic_username }}"
+    password: "{{ apic_password }}"
+    validate_certs: true
+    method: get
+    path: "/api/node/class/{{ aci_class }}.json"
+    page: "{{ item }}"
+    page_size: "{{ aci_page_size }}"
+  loop: "{{ range(0, aci_max_pages | int) | list }}"
+  register: aci_pages
+  no_log: true
+
+- name: Reject truncated class collection
+  ansible.builtin.assert:
+    that:
+      - aci_pages.results | length == (aci_max_pages | int)
+      - (aci_pages.results[-1].current | length) < (aci_page_size | int)
+    fail_msg: "{{ aci_class }} may be truncated; increase aci_max_pages and retry."
+  no_log: true
+
+- name: Save native APIC response pages for {{ aci_class }}
+  ansible.builtin.copy:
+    dest: "{{ aci_output_dir }}/{{ aci_class }}.json"
+    mode: '0600'
+    content: "{{ aci_pages.results | map(attribute='current') | list | to_nice_json }}"
+  no_log: true

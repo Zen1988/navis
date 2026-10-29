@@ -1,0 +1,30 @@
+---
+- name: Query {{ checkpoint_command }} in bounded pages
+  ansible.builtin.uri:
+    url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/{{ checkpoint_command }}"
+    method: POST
+    headers:
+      X-chkp-sid: "{{ checkpoint_session }}"
+    body_format: json
+    body: "{{ checkpoint_parameters | combine({'limit': checkpoint_page_size | int, 'offset': item * (checkpoint_page_size | int), 'details-level': 'full'}) }}"
+    validate_certs: true
+    status_code: 200
+    return_content: true
+  loop: "{{ range(0, checkpoint_max_pages | int) | list }}"
+  register: checkpoint_pages
+  no_log: true
+
+- name: Refuse output when total is missing or exceeds the page budget
+  ansible.builtin.assert:
+    that:
+      - checkpoint_pages.results[0].json.total is defined
+      - checkpoint_pages.results[0].json.total | int <= (checkpoint_page_size | int) * (checkpoint_max_pages | int)
+    fail_msg: 'Collection may be truncated or this API response does not expose a total.'
+  no_log: true
+
+- name: Save selected management responses
+  ansible.builtin.copy:
+    dest: "{{ checkpoint_output_dir }}/{{ checkpoint_filename }}.json"
+    mode: '0600'
+    content: "{{ checkpoint_pages.results | map(attribute='json') | list | to_nice_json }}"
+  no_log: true

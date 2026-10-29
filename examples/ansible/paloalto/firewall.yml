@@ -1,0 +1,43 @@
+---
+- name: Validate firewall serial used as an output directory
+  ansible.builtin.assert:
+    that:
+      - firewall_serial is match('^[A-Za-z0-9_-]+$')
+    quiet: true
+
+- name: Create firewall output directory
+  ansible.builtin.file:
+    path: "{{ panorama_output_dir }}/{{ firewall_serial }}"
+    state: directory
+    mode: '0700'
+
+- name: Query selected firewall data through Panorama
+  ansible.builtin.uri:
+    url: "https://{{ panorama_host }}/api/"
+    method: POST
+    headers:
+      X-PAN-KEY: "{{ panorama_api_key }}"
+    body_format: form-urlencoded
+    body: "{{ item.form | combine({'target': firewall_serial}) }}"
+    validate_certs: true
+    return_content: true
+    status_code: 200
+  loop: "{{ pan_queries }}"
+  register: pan_results
+  no_log: true
+
+- name: Verify API responses reported success
+  ansible.builtin.assert:
+    that:
+      - item.content is search('status="success"')
+    fail_msg: "PAN-OS API returned an error for {{ item.item.name }} on {{ firewall_serial }}."
+  loop: "{{ pan_results.results }}"
+  no_log: true
+
+- name: Store selected native XML responses
+  ansible.builtin.copy:
+    dest: "{{ panorama_output_dir }}/{{ firewall_serial }}/{{ item.item.name }}.xml"
+    mode: '0600'
+    content: "{{ item.content }}"
+  loop: "{{ pan_results.results }}"
+  no_log: true

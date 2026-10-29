@@ -1,0 +1,63 @@
+---
+- name: Collect IOS and IOS XE connectivity evidence
+  hosts: ios_devices
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  vars:
+    ansible_network_os: cisco.ios.ios
+    navis_ios_output_dir: ./ios-output
+    # Commands vary by release, feature and privilege; retain unsupported results.
+    navis_ios_commands:
+      - show version
+      - show interfaces
+      - show ip interface
+      - show ipv6 interface
+      - show ip vrf
+      - show ip route
+      - show ip route vrf *
+      - show ipv6 route
+      - show ipv6 route vrf all
+      - show ip access-lists
+      - show ipv6 access-list
+      - show ip policy
+      - show route-map
+      - show ip nat translations
+      - show ip nat statistics
+      - show ip arp
+      - show mac address-table
+      - show cdp neighbors detail
+      - show lldp neighbors detail
+  tasks:
+    - name: Validate device identifier for the output filename
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname is match('^[A-Za-z0-9_.-]+$')
+          - inventory_hostname not in ['.', '..']
+
+    - name: Create protected controller output directory
+      ansible.builtin.file:
+        path: "{{ navis_ios_output_dir }}"
+        state: directory
+        mode: '0700'
+      delegate_to: localhost
+
+    - name: Run read-only commands separately
+      cisco.ios.ios_command:
+        commands:
+          - "{{ item }}"
+      loop: "{{ navis_ios_commands }}"
+      register: ios_collection
+      ignore_errors: true
+      no_log: true
+
+    - name: Save command results on the controller
+      ansible.builtin.copy:
+        dest: "{{ navis_ios_output_dir }}/{{ inventory_hostname }}.json"
+        mode: '0600'
+        content: "{{ {'device_id': inventory_hostname, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'results': ios_collection.results} | to_nice_json }}"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Report completion without printing device data
+      ansible.builtin.debug:
+        msg: "Saved partial IOS collection for {{ inventory_hostname }}; inspect command failures and unsupported commands before use."

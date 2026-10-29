@@ -35,6 +35,21 @@ Navis is an analytical engine focused on connectivity reasoning.
 
 # High-Level Architecture
 
+## Responsibility boundary: collection, adapters and analysis
+
+The intended flow is **vendor data → collector → vendor adapter → normalized Navis data → analysis engine**.
+
+- A collector (for example Ansible, Salt or another external system) authenticates to the source, gathers native configuration and operational data, and passes it to the appropriate adapter. Collection credentials remain outside Navis. The collector is not responsible for translating ACI EPGs, contracts or another product's policy model into Navis rules.
+- A product-specific adapter interprets the native data and resolves vendor concepts into Navis's common device, interface, routing, topology, policy and NAT models. For policy, this includes mapping native objects and relationships into source, destination, service, action, direction, enforcement context, rule order and other applicable semantics. It preserves native identifiers and provenance for explanations. The adapter—not the user or the analysis engine—owns vendor-specific interpretation.
+- The ingestion/worker boundary validates and persists the normalized records. Identity mapping and adapter artifact approval still apply. An adapter may run externally on the collector today; a future in-service adapter must obey the same trust boundary.
+- The analysis engine evaluates normalized routing, policy and NAT semantics consistently across vendors. It does not need product-specific EPG or contract logic to evaluate a normalized policy.
+
+The desired outcome is an evaluable normalized model, not merely a vendor-shaped inventory or a list of policy candidates. Preserve raw data and unresolved findings as supporting evidence, but continue implementing the mapping into the common model. Do not invent missing selectors, direction, ordering, membership, enforcement or completeness: return unknown where the collected data cannot establish them, and identify what evidence is missing. Successful staging or a partial synthetic test does not establish end-to-end correctness.
+
+### Current ACI implementation
+
+The APIC Ansible example collects native data, including selected IPv4 and IPv6 URIB routes and next hops. The collector-side ACI adapter currently maps physical interfaces and derives partial policy candidates and selectors from observed endpoint addresses, external security prefixes and supported filters. It stores fabric evidence separately; the current policy worker marks selectors incomplete and the engine cannot yet treat these policies as confirmed allow/deny decisions. ACI direction, effective precedence and enforcement, complete membership and installed forwarding remain to be translated and validated. Do not mistake candidate records, raw-only ingestion or the evidence views for a complete ACI adapter.
+
 ```text
                           +------------------+
                           | External Clients |

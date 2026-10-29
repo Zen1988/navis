@@ -1,0 +1,72 @@
+---
+- name: Collect selected BIG-IP network evidence
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    f5_output_dir: ./f5-output
+    f5_partition: Common
+    f5_commands:
+      - {name: configured-routes, command: 'list net route all-properties'}
+      - {name: route-domains, command: 'list net route-domain all-properties'}
+      - {name: virtual-addresses, command: 'list ltm virtual-address all-properties'}
+      - {name: firewall-policies, command: 'list security firewall policy all-properties'}
+      - {name: firewall-rule-lists, command: 'list security firewall rule-list all-properties'}
+      - {name: firewall-global-rules, command: 'list security firewall global-rules all-properties'}
+      - {name: firewall-address-lists, command: 'list security firewall address-list all-properties'}
+      - {name: firewall-port-lists, command: 'list security firewall port-list all-properties'}
+      - {name: packet-filter-policies, command: 'list security packet-filter policy all-properties'}
+  tasks:
+    - name: Validate collector inputs
+      ansible.builtin.assert:
+        that: [f5_host is defined, f5_user is defined, f5_password is defined]
+        quiet: true
+      no_log: true
+    - name: Create protected directory
+      ansible.builtin.file:
+        path: '{{ f5_output_dir }}'
+        state: directory
+        mode: '0700'
+    - name: Collect device and application configuration via F5 module
+      f5networks.f5_modules.bigip_device_info:
+        provider:
+          server: '{{ f5_host }}'
+          user: '{{ f5_user }}'
+          password: '{{ f5_password }}'
+          validate_certs: true
+          no_f5_teem: true
+        partition: '{{ f5_partition }}'
+        gather_subset: [system-info, devices, interfaces, vlans, self-ips, route-domains, virtual-addresses, virtual-servers, ltm-pools, nodes, sync-status]
+      register: f5_facts
+      no_log: true
+    - name: Save facts
+      ansible.builtin.copy:
+        dest: '{{ f5_output_dir }}/facts.json'
+        content: '{{ f5_facts | to_nice_json }}'
+        mode: '0600'
+      no_log: true
+    - name: Collect selected tmsh configuration
+      f5networks.f5_modules.bigip_command:
+        provider:
+          server: '{{ f5_host }}'
+          user: '{{ f5_user }}'
+          password: '{{ f5_password }}'
+          validate_certs: true
+          no_f5_teem: true
+        commands: ['{{ item.command }}']
+      loop: '{{ f5_commands }}'
+      register: f5_command_results
+      ignore_errors: true
+      no_log: true
+    - name: Save each successful result and record failures
+      ansible.builtin.copy:
+        dest: '{{ f5_output_dir }}/{{ item.item.name }}.json'
+        content: '{{ {"command": item.item.command, "failed": item.failed | default(false), "stdout": item.stdout | default([])} | to_nice_json }}'
+        mode: '0600'
+      loop: '{{ f5_command_results.results }}'
+      no_log: true
+    - name: Mark incomplete coverage
+      ansible.builtin.copy:
+        dest: '{{ f5_output_dir }}/metadata.json'
+        content: '{{ {"coverage": "partial", "reason": "selected configuration only; operational routes, advertisements and effective security require further collection"} | to_nice_json }}'
+        mode: '0600'

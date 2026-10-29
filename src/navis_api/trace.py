@@ -13,6 +13,7 @@ class TraceRequest(BaseModel):
     destination: str = Field(min_length=1, max_length=16000)
     protocol: str = Field(min_length=1, max_length=16)
     destination_port: int | None = Field(default=None, ge=0, le=65535, strict=True)
+    source_port: int | None = Field(default=None, ge=0, le=65535, strict=True)
 
     def flows(self) -> list[Flow]:
         return expand_flows(self.source, self.destination, self.protocol, self.destination_port)

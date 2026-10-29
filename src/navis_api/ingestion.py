@@ -32,7 +32,7 @@ class Ingestion(BaseModel):
     source: Source
     device_mapping: DeviceMapping | None = None
     adapter: Adapter
-    data_type: Literal["device", "interface", "route", "policy", "nat", "neighbor", "mac", "topology"]
+    data_type: Literal["device", "interface", "route", "policy", "nat", "neighbor", "mac", "topology", "security_zone"]
     collected_at: datetime
     completeness: Literal["complete", "partial", "unknown"]
     payload: dict[str, Any]

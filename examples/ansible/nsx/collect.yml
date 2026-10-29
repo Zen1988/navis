@@ -1,0 +1,43 @@
+---
+- name: Collect selected NSX Manager policy resources
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    nsx_output_dir: ./nsx-output
+    nsx_max_pages: 100
+    nsx_resources:
+      - {name: domains, path: '/policy/api/v1/infra/domains'}
+      - {name: groups, path: '/policy/api/v1/infra/domains/{{ nsx_domain | urlencode }}/groups'}
+      - {name: security-policies, path: '/policy/api/v1/infra/domains/{{ nsx_domain | urlencode }}/security-policies'}
+      - {name: services, path: '/policy/api/v1/infra/services'}
+  tasks:
+    - name: Validate configuration
+      ansible.builtin.assert:
+        that:
+          - nsx_base_url is defined
+          - nsx_base_url is match('^https://[^/]+/?$')
+          - nsx_username is defined
+          - nsx_password is defined
+          - nsx_domain is defined
+          - nsx_max_pages | int > 0
+        quiet: true
+      no_log: true
+
+    - name: Create protected output directory
+      ansible.builtin.file:
+        path: "{{ nsx_output_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Query resources with cursor pagination
+      ansible.builtin.include_tasks: resource.yml
+      loop: "{{ nsx_resources }}"
+      loop_control:
+        loop_var: nsx_resource
+
+    - name: Write metadata
+      ansible.builtin.copy:
+        dest: "{{ nsx_output_dir }}/metadata.json"
+        mode: '0600'
+        content: "{{ {'domain': nsx_domain, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'reason': 'selected policy resources only; effective rules, membership, topology and routes require further collection'} | to_nice_json }}"

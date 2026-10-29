@@ -8,6 +8,12 @@ Status: Active
 
 # Mission
 
+## Collector and adapter ownership
+
+Collectors such as Ansible and Salt gather native product data. Vendor-specific adapters interpret that data and normalize it into Navis's common model; the analysis engine consumes that common model. In particular, an ACI adapter must resolve EPGs, contracts and filters into normalized policy selectors and actions. It must not require an operator or the playbook to supply a separate vendor-to-Navis policy mapping. Raw evidence and candidate lists support this work but do not complete it.
+
+When a product's meaning cannot be established from collected evidence, preserve the uncertainty and keep developing the adapter and data model until supported cases can be evaluated. See the responsibility boundary and current ACI status in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 Navis exists to understand connectivity.
 
 Modern infrastructure contains multiple independent policy domains that influence communication between systems. Determining whether connectivity is possible is no longer a matter of checking a single firewall.

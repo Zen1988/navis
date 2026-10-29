@@ -1,0 +1,15 @@
+---
+- name: Validate discovered layer identifier
+  ansible.builtin.assert:
+    that:
+      - checkpoint_layer is match('^[A-Za-z0-9_-]+$')
+    fail_msg: 'Discovered layer identifier is not safe as a filename.'
+
+- name: Collect access rulebase pages
+  ansible.builtin.include_tasks: query_pages.yml
+  vars:
+    checkpoint_command: show-access-rulebase
+    checkpoint_filename: "access-{{ checkpoint_layer }}"
+    checkpoint_parameters:
+      uid: "{{ checkpoint_layer }}"
+      use-object-dictionary: true

@@ -17,11 +17,13 @@ Before writing code, read:
 
 ```text
 README.md
-docs/PROJECT.md
+docs/PROJECTS.md
 docs/ARCHITECTURE.md
 ```
 
 The project philosophy is defined in those documents.
+
+For collector and adapter work, follow the responsibility boundary in `docs/ARCHITECTURE.md`: collectors retrieve native evidence, product adapters normalize vendor semantics, and the analysis engine evaluates common models. Do not move vendor interpretation into the playbook or ask users to hand-map policies as a substitute for implementing the adapter. Keep incomplete or ambiguous evidence explicit and do not claim a mapping is complete without validating it.
 
 ---
 

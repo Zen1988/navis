@@ -1,0 +1,106 @@
+---
+- name: Collect selected Check Point management objects
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    checkpoint_output_dir: ./checkpoint-output
+    checkpoint_page_size: 100
+    checkpoint_max_pages: 10
+    checkpoint_session: {}
+  tasks:
+    - name: Validate collector input
+      ansible.builtin.assert:
+        that:
+          - checkpoint_api_url is defined
+          - checkpoint_username is defined
+          - checkpoint_password is defined
+          - checkpoint_api_url is match('^https://')
+          - checkpoint_page_size | int > 0
+          - checkpoint_page_size | int <= 500
+          - checkpoint_max_pages | int > 0
+        quiet: true
+      no_log: true
+
+    - name: Create protected output directory
+      ansible.builtin.file:
+        path: "{{ checkpoint_output_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Collect management data in a read-only session
+      block:
+        - name: Log in to the management API
+          ansible.builtin.uri:
+            url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/login"
+            method: POST
+            body_format: json
+            body: "{{ {'user': checkpoint_username, 'password': checkpoint_password} | combine({'domain': checkpoint_domain} if checkpoint_domain is defined else {}) }}"
+            validate_certs: true
+            status_code: 200
+            return_content: true
+          register: checkpoint_login
+          no_log: true
+
+        - name: Record session token in memory
+          ansible.builtin.set_fact:
+            checkpoint_session: "{{ checkpoint_login.json.sid }}"
+          no_log: true
+
+        - name: Collect gateway inventory
+          ansible.builtin.include_tasks: query_pages.yml
+          vars:
+            checkpoint_command: show-gateways-and-servers
+            checkpoint_filename: gateways
+            checkpoint_parameters: {}
+
+        - name: Collect policy packages
+          ansible.builtin.include_tasks: query_pages.yml
+          vars:
+            checkpoint_command: show-packages
+            checkpoint_filename: packages
+            checkpoint_parameters: {}
+
+        - name: Discover access layers
+          ansible.builtin.include_tasks: query_pages.yml
+          vars:
+            checkpoint_command: show-access-layers
+            checkpoint_filename: access-layers
+            checkpoint_parameters: {}
+
+        - name: Validate and collect discovered layer identifiers
+          ansible.builtin.set_fact:
+            checkpoint_access_layers: "{{ checkpoint_pages.results | map(attribute='json') | map(attribute='access-layers') | flatten | map(attribute='uid') | unique | list }}"
+          no_log: true
+
+        - name: Verify the discovered layer count
+          ansible.builtin.assert:
+            that:
+              - checkpoint_access_layers | length == checkpoint_pages.results[0].json.total | int
+            fail_msg: 'Layer discovery did not account for every reported layer; verify pagination and permissions.'
+          no_log: true
+
+        - name: Collect discovered access layers
+          ansible.builtin.include_tasks: access_layer.yml
+          loop: "{{ checkpoint_access_layers }}"
+          loop_control:
+            loop_var: checkpoint_layer
+
+        - name: Write partial-coverage metadata
+          ansible.builtin.copy:
+            dest: "{{ checkpoint_output_dir }}/metadata.json"
+            mode: '0600'
+            content: "{{ {'collected_at': ansible_date_time.iso8601, 'coverage': 'partial', 'access_layers': checkpoint_access_layers, 'reason': 'selected management objects only; gateway forwarding and installed policy not verified'} | to_nice_json }}"
+      always:
+        - name: Log out of the management API
+          ansible.builtin.uri:
+            url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/logout"
+            method: POST
+            headers:
+              X-chkp-sid: "{{ checkpoint_session }}"
+            body_format: json
+            body: {}
+            validate_certs: true
+            status_code: 200
+          when: checkpoint_session is string and checkpoint_session | length > 0
+          no_log: true

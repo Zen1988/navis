@@ -1,0 +1,92 @@
+---
+- name: Collect a bounded ACI fabric snapshot from one APIC
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    aci_page_size: 500
+    aci_max_pages: 20
+    aci_output_dir: ./aci-output
+    # Each class is queried independently to retain its native data.
+    aci_classes:
+      - fabricNode
+      - l1PhysIf
+      - ethpmPhysIf
+      - fvTenant
+      - fvCtx
+      - fvBD
+      - fvSubnet
+      - fvAp
+      - fvAEPg
+      - fvRsBd
+      - fvRsCtx
+      - fvRsPathAtt
+      - fvRsProv
+      - fvRsCons
+      - vzBrCP
+      - vzSubj
+      - vzRsSubjFiltAtt
+      - vzInTerm
+      - vzOutTerm
+      - vzRsFiltAtt
+      - vzProvLbl
+      - vzConsLbl
+      - vzProvSubjLbl
+      - vzConsSubjLbl
+      - vzException
+      - vzFilter
+      - vzEntry
+      - fvCEp
+      - fvIp
+      - fvRsCEpToPathEp
+      - l3extOut
+      - l3extInstP
+      - l3extSubnet
+      - l3extRsEctx
+      - l3extRsProv
+      - l3extRsCons
+      - l3extLNodeP
+      - l3extLIfP
+      - l3extRsNodeL3OutAtt
+      - l3extRsPathL3OutAtt
+      # Operational routing objects; validate availability for the APIC release.
+      - uribv4Route
+      - uribv4Nexthop
+      - uribv6Route
+      - uribv6Nexthop
+      - lldpAdjEp
+      - cdpAdjEp
+  tasks:
+    - name: Validate collection inputs
+      ansible.builtin.assert:
+        that:
+          - apic_host is defined
+          - apic_username is defined
+          - apic_password is defined
+          - aci_fabric_id is defined
+          - aci_page_size | int > 0
+          - aci_max_pages | int > 0
+        quiet: true
+      no_log: true
+
+    - name: Create protected output directory
+      ansible.builtin.file:
+        path: "{{ aci_output_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Query selected APIC classes
+      ansible.builtin.include_tasks: query_class.yml
+      loop: "{{ aci_classes }}"
+      loop_control:
+        loop_var: aci_class
+
+    - name: Write collection metadata
+      ansible.builtin.copy:
+        dest: "{{ aci_output_dir }}/metadata.json"
+        mode: '0600'
+        content: "{{ {'fabric_id': aci_fabric_id, 'apic_host': apic_host, 'collected_at': ansible_date_time.iso8601, 'classes': aci_classes, 'coverage': 'partial', 'reason': 'selected classes only; collection is not a consistent snapshot'} | to_nice_json }}"
+
+    - name: Report collection location
+      ansible.builtin.debug:
+        msg: "Partial ACI data saved in {{ aci_output_dir }} for fabric {{ aci_fabric_id }}."

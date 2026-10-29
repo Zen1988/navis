@@ -1,0 +1,9 @@
+---
+- name: Initialize cursor
+  ansible.builtin.set_fact:
+    nsx_cursor: ''
+    nsx_page_number: 0
+  no_log: true
+
+- name: Fetch first and remaining pages
+  ansible.builtin.include_tasks: page.yml

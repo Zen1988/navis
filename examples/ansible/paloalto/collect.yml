@@ -1,0 +1,56 @@
+---
+- name: Collect selected firewall evidence through Panorama
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    panorama_output_dir: ./panorama-output
+    # The caller supplies firewall serials; discovery of managed devices and
+    # Panorama inheritance is intentionally separate from this example.
+    pan_queries:
+      - name: system-info
+        form: {type: op, cmd: '<show><system><info></info></system></show>'}
+      - name: security-rulebase
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/rulebase/security'}
+      - name: nat-rulebase
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/rulebase/nat'}
+      - name: address-objects
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/address'}
+      - name: address-groups
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/address-group'}
+      - name: service-objects
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/service'}
+      - name: service-groups
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/service-group'}
+      - name: zones
+        form: {type: config, action: show, xpath: '/config/devices/entry/vsys/entry/zone'}
+      - name: interfaces
+        form: {type: config, action: show, xpath: '/config/devices/entry/network/interface'}
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - panorama_host is defined
+          - panorama_api_key is defined
+          - firewall_serials is defined
+          - firewall_serials | length > 0
+        quiet: true
+      no_log: true
+
+    - name: Create protected output directory
+      ansible.builtin.file:
+        path: "{{ panorama_output_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Collect each targeted firewall
+      ansible.builtin.include_tasks: firewall.yml
+      loop: "{{ firewall_serials }}"
+      loop_control:
+        loop_var: firewall_serial
+
+    - name: Save metadata
+      ansible.builtin.copy:
+        dest: "{{ panorama_output_dir }}/metadata.json"
+        mode: '0600'
+        content: "{{ {'collected_at': ansible_date_time.iso8601, 'firewall_serials': firewall_serials, 'coverage': 'partial', 'reason': 'selected targeted queries only; effective policy and operational routing not established'} | to_nice_json }}"

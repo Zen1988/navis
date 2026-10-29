@@ -1,0 +1,45 @@
+---
+- name: Read NSX resource page
+  ansible.builtin.uri:
+    url: "{{ nsx_base_url | regex_replace('/+$', '') }}{{ nsx_resource.path }}{{ ('?cursor=' ~ (nsx_cursor | urlencode)) if nsx_cursor else '' }}"
+    method: GET
+    url_username: "{{ nsx_username }}"
+    url_password: "{{ nsx_password }}"
+    force_basic_auth: true
+    validate_certs: true
+    return_content: true
+    status_code: 200
+  register: nsx_response
+  no_log: true
+
+- name: Validate page format
+  ansible.builtin.assert:
+    that:
+      - nsx_response.json.results is defined
+      - nsx_response.json.results is sequence
+    fail_msg: 'Unexpected NSX response; collection is incomplete.'
+  no_log: true
+
+- name: Store native page
+  ansible.builtin.copy:
+    dest: "{{ nsx_output_dir }}/{{ nsx_resource.name }}-{{ nsx_page_number }}.json"
+    mode: '0600'
+    content: "{{ nsx_response.json | to_nice_json }}"
+  no_log: true
+
+- name: Advance cursor
+  ansible.builtin.set_fact:
+    nsx_cursor: "{{ nsx_response.json.cursor | default('') }}"
+    nsx_page_number: "{{ (nsx_page_number | int) + 1 }}"
+  no_log: true
+
+- name: Stop on page limit
+  ansible.builtin.assert:
+    that:
+      - not nsx_cursor or (nsx_page_number | int) < (nsx_max_pages | int)
+    fail_msg: 'NSX pagination limit reached; collection is incomplete.'
+  no_log: true
+
+- name: Fetch next page
+  ansible.builtin.include_tasks: page.yml
+  when: nsx_cursor | length > 0
