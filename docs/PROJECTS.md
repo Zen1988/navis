@@ -4,6 +4,8 @@ Version: 1.0
 
 Status: Active
 
+For current implementation, verified tests and the next work, read [STATUS.md](STATUS.md). The charter describes the intended product and is not a claim that every feature is complete.
+
 ---
 
 # Mission

@@ -1,5 +1,7 @@
 # API foundation
 
+> Status note: several older descriptions below predate the prototype worker, graph and trace improvements. See [STATUS.md](STATUS.md) and the source code for the current state. Fixture-specific tests do not establish production readiness.
+
 The FastAPI application is `navis_api.main:app`. Install the project and run `uvicorn navis_api.main:app`. Liveness is available at `/health/live`; readiness remains 503 until authentication and processing are implemented. The application endpoint requires a bearer token with `application:read`, and currently returns 503 after authentication because storage is not implemented.
 
 `POST /v1/ingestions` accepts a common JSON envelope with source namespace and external device ID, optional claimed Navis UUID, adapter name/input format/version, data type, timezone-aware collection time, completeness, and a JSON object payload. It requires `inventory:write`. The optional PostgreSQL processor checks an issuer-bound active consumer and source-specific `consumer_data_scope` permission, then stores the raw submission transactionally as `pending_identity`. A claimed device is not an association. Identity resolution, device authorization and approved adapter execution remain unimplemented. The default processor returns 503 and stores nothing; an operator must explicitly configure the database processor and a trusted verifier. Request size limits must be enforced at ingress and in the application before production.

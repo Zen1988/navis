@@ -19,6 +19,7 @@ Before writing code, read:
 README.md
 docs/PROJECTS.md
 docs/ARCHITECTURE.md
+docs/STATUS.md
 ```
 
 The project philosophy is defined in those documents.

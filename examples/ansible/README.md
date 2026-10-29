@@ -1,5 +1,7 @@
 # Collector examples
 
+For current implementations and adapter gaps, see [project status](../../docs/STATUS.md). The ACI example now includes a partial collector-side adapter; the general examples below are not a complete inventory of implemented collectors.
+
 These are partial, read-only examples, not production collectors or complete network discovery. Run on an Ansible controller with network access and credentials managed in AWX/Ansible Vault or another external secret store. Navis does not receive device credentials. Verify endpoints, version compatibility, permissions, pagination, certificates and response redaction for your platform. Some outputs may contain sensitive configuration.
 
 `rest_discovery.yml` demonstrates a single GET using an externally supplied URL and bearer token, with TLS verification enabled. Use the documented endpoint examples below as a starting point, then implement platform-specific authentication and pagination. API responses are not the Navis normalized JSON format: do not submit them as `navis/normalized-json/1`. Navis currently has no native vendor adapters and its ingestion API is not configured by default.
