@@ -870,3 +870,17 @@ do not build it.
 ```text
 Understand Every Path.
 ```
+
+---
+
+# Application-Centered Connectivity
+
+An application may define static membership of devices and hosts and the flows it requires. Navis derives the network dependencies for those flows from routing, topology, NAT, and policy evidence. The resulting application view shows the relevant paths and controls, including shared infrastructure, and explains why each is involved. Membership alone does not specify required flows; missing flow definitions make dependency analysis incomplete.
+
+Navis can identify rules that permit a particular flow locally while another control or missing route prevents end-to-end connectivity. Findings must identify the native device and rule, the analyzed scope, evidence, and limitations. A finding about one flow does not prove an entire rule is unused or safe to remove. Usage claims require suitable usage evidence; Navis recommends changes and does not apply them.
+
+# Collection and API Access
+
+External collectors acquire infrastructure data and push it to Navis. Product adapters interpret submitted data; they do not access devices or manage device credentials. A CMDB or other external inventory may provide identity mappings.
+
+Application identity and credential management remain external. Navis may validate externally issued credentials and enforce API scopes and data boundaries. This refines the earlier authentication and authorization non-goal: Navis does not build an identity or credential management platform, but protects its APIs.

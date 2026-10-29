@@ -1,0 +1,8 @@
+{
+  "source": {"namespace": "lab", "external_device_id": "firewall-lab-01"},
+  "adapter": {"name": "navis", "input_format": "normalized-json", "format_version": "1"},
+  "data_type": "nat",
+  "collected_at": "2026-10-29T10:00:00Z",
+  "completeness": "partial",
+  "payload": {"entries": [{"enforcement_point": "vsys1", "rule_set": "nat", "processing_stage": "vendor-defined", "rule_id": "nat-1", "position": 1, "enabled": true, "translation_kind": "destination", "translation": {"address": "10.10.1.10"}, "selectors": [{"role": "destination", "kind": "address", "value": "198.51.100.10/32", "negated": false}]}]}
+}

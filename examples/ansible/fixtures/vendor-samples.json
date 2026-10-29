@@ -1,0 +1,12 @@
+{
+  "notice": "Illustrative, abbreviated examples for contract development; not captured vendor responses and not complete configurations.",
+  "samples": {
+    "nsx": {"results": [{"id": "app-policy", "display_name": "App policy", "rules": [{"id": "rule-1", "action": "ALLOW"}]}]},
+    "aci": {"imdata": [{"fvTenant": {"attributes": {"name": "production", "dn": "uni/tn-production"}}}]},
+    "nexus": {"interfaces": [{"name": "Ethernet1/1", "state": "up", "ipv4": "192.0.2.1/24", "vrf": "default"}]},
+    "palo_alto": {"rules": [{"name": "app-to-db", "source": ["192.0.2.0/24"], "destination": ["198.51.100.10"], "action": "allow"}]},
+    "f5": {"items": [{"name": "app-vip", "destination": "/Common/192.0.2.10:443", "pool": "/Common/app-pool"}]},
+    "avi": {"results": [{"name": "app-vs", "enabled": true, "vip": [{"ip_address": {"addr": "192.0.2.10", "type": "V4"}}]}]},
+    "fortigate": {"results": [{"policyid": 10, "name": "app-to-db", "action": "accept"}]}
+  }
+}

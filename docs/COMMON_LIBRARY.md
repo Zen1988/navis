@@ -1,0 +1,13 @@
+# Shared connectivity library
+
+`navis_common` contains reusable, deterministic analysis primitives for API services and product adapters. The initial address matcher supports IPv4 and IPv6 hosts, CIDRs and inclusive ranges. CIDR parsing normalizes host bits: `172.20.0.1/24` matches `172.20.0.2`. Adapters must first determine whether their platform accepts and interprets that representation this way.
+
+The initial policy evaluator handles ordered first-match rules with a single source range, destination range, protocol and destination port, followed by a caller-supplied default. It returns the native rule identifier when supplied. The caller must establish the correct enforcement context, rule order, default and dataset completeness; use `unknown` if the default is not known. It is not an end-to-end reachability verdict. NAT, zones, schedules, group exclusions, rule conditions and vendor-specific semantics are not yet implemented. Do not pass an incomplete rule set as though it were complete.
+
+MAC helpers normalize and compare complete 48-bit addresses in colon, hyphen, Cisco dotted, or unseparated hexadecimal notation. They do not infer a device identity or topology link: callers must also consider the VLAN or bridge domain, device, interface, and observation time.
+
+Device matching resolves a trusted, time-valid `(source namespace, external ID)` mapping to a Navis UUID. Conflicting mappings are ambiguous. Names and IPs, filtered by a compatible known platform, only produce review candidates; they never cause an automatic merge. The caller supplies trusted mappings valid for the snapshot time and performs reconciliation and persistence. An unmatched submission remains unresolved.
+
+The returned `DeviceMatch` includes `status`, candidate UUIDs, a reason, and `requires_confirmation`. For `review` or `ambiguous`, callers must stop automatic association and ask an authorized operator or external workflow to resolve the mapping. `unresolved` means no candidates were found; the caller must handle it explicitly. The library returns structured results rather than terminating the process; API or CLI layers should translate these statuses into their own response or exit codes.
+
+Run tests from the repository root with `python -m unittest discover -s tests`, after installing the project (`python -m pip install -e .`) or setting `PYTHONPATH=src`.

@@ -1,0 +1,8 @@
+{
+  "source": {"namespace": "lab", "external_device_id": "nexus-lab-01"},
+  "adapter": {"name": "navis", "input_format": "normalized-json", "format_version": "1"},
+  "data_type": "neighbor",
+  "collected_at": "2026-10-29T10:00:00Z",
+  "completeness": "partial",
+  "payload": {"entries": [{"interface": "Ethernet1/1", "vrf": "default", "ip": "192.0.2.2", "mac": "00:11:22:33:44:55", "state": "reachable"}]}
+}

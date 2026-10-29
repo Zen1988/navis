@@ -1,0 +1,22 @@
+---
+- name: Read one vendor API resource (partial example)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read a resource using an externally managed token
+      ansible.builtin.uri:
+        url: "{{ collector_url }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ collector_token }}"
+          Accept: application/json
+        validate_certs: true
+        return_content: true
+        status_code: 200
+      register: discovery_response
+      no_log: true
+
+    - name: Report that the request completed
+      ansible.builtin.debug:
+        msg: "Discovery request returned HTTP {{ discovery_response.status }}."

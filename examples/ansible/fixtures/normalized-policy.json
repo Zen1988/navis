@@ -1,0 +1,8 @@
+{
+  "source": {"namespace": "lab", "external_device_id": "firewall-lab-01"},
+  "adapter": {"name": "navis", "input_format": "normalized-json", "format_version": "1"},
+  "data_type": "policy",
+  "collected_at": "2026-10-29T10:00:00Z",
+  "completeness": "partial",
+  "payload": {"entries": [{"enforcement_point": "vsys1", "rule_set": "security", "default_action": "deny", "rule_id": "rule-1", "position": 1, "action": "allow", "enabled": true, "selectors": [{"role": "source", "kind": "address", "value": "192.0.2.0/24", "negated": false}, {"role": "destination", "kind": "address", "value": "198.51.100.10/32", "negated": false}, {"role": "service", "kind": "service", "value": {"protocol": "tcp", "destination_port_start": 443, "destination_port_end": 443}, "negated": false}]}]}
+}

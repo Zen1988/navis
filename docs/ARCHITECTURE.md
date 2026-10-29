@@ -848,3 +848,56 @@ Apache AGE Explains Relationships.
 
 Navis Understands Connectivity.
 ```
+
+---
+
+# Connectivity Data and Analysis Design
+
+The following is a conceptual design for implementation, not a completed schema.
+See [PostgreSQL schema design](SCHEMA.md) for proposed tables, relationships, and constraints.
+
+## Identity and snapshots
+
+Each device has a stable Navis UUID. Source-system identifiers map to that UUID with provenance and validity; CMDB, collector, or explicitly supplied mappings can provide the association. IP addresses, device type, and display names can help identify candidates but are not sufficient to merge devices automatically. Ambiguous imports remain unresolved for reconciliation.
+
+A device can have many addresses on physical interfaces, VLAN interfaces, loopbacks, or management interfaces. Interface addresses and routing contexts are distinct records; overlapping IP addresses can exist in different contexts. A device snapshot records collection and ingestion times, platform and firmware version, and completeness by data type. Normalized records reference their snapshot, and raw vendor payloads are preserved in JSONB. Record the adapter version used to interpret a payload.
+
+An analysis records the precise snapshots used across devices and reports missing, incomplete, or stale evidence. This allows results to be understood and reproduced even when collection times differ.
+
+## Routes and topology
+
+Route records include a destination prefix, routing context, route type, protocol, preference and metric when supplied. Related next-hop records support multiple next hops and outgoing interfaces. Preserve whether the collected data represents candidate routes, selected routing entries, or installed forwarding entries; do not treat a persisted selection flag as a permanent decision.
+
+For a destination and routing context, the engine finds containing prefixes and applies longest-prefix matching, then uses available platform-specific selection and eligibility evidence. It handles recursive next hops, alternatives, discard routes and loops. A more specific route does not automatically fall back to a broader one when a next hop fails. BGP instances, peers, AS paths, filters, import/export policy and redistribution are optional evidence for explaining route exchange and selection.
+
+Neighbor and MAC forwarding entries help resolve next-hop IPs, interfaces and Layer 2 attachment. MAC entries alone do not establish a direct link. Imported neighbor and topology evidence, and manually declared links where discovery is unavailable, contribute relationships to the graph. Store manual links in PostgreSQL with endpoints, context and provenance; preserve conflicts and uncertainty rather than silently overwriting evidence.
+
+## NAT and policy
+
+NAT rules are ordered and preserve match conditions, processing context, translation action, and native references. Support source and destination translation, combined translation, dynamic pools and port translation, and explicit no-NAT rules where the platform supports them. The engine carries packet addresses and ports through transformations. Adapters preserve platform-specific routing, NAT and policy processing order and identify which original or translated fields each stage evaluates.
+
+Adapters convert native policy constructs into a shared model while retaining their evaluation semantics and native object references. Policy rule sets capture scope, ordering, direction and a default action of allow, deny or unknown. Apply the default only when the relevant rule set and its behavior are known; incomplete evidence produces an unknown result. Rules retain native device rule IDs, selectors, action, service, schedule or validity, and applicable interfaces and security zones. Address objects represent effective hosts, prefixes, ranges, groups and exclusions separately from interface subnet configuration.
+
+Organizational network zones and device-specific security zones are separate concepts. Security zones are scoped to the relevant enforcement point and context, and their membership and mapping are interpreted by the adapter. Zone names are not globally unique. VRFs represent routing contexts; a policy permitting traffic between contexts does not by itself establish a route between them.
+
+## Graph and application views
+
+Apache AGE holds a derived global graph of topology and routing relationships, with links to source records and snapshots. Graph traversal discovers candidate paths; the analysis engine evaluates destination prefixes, routing contexts, NAT and enforcement at each step. Graph data is rebuildable from PostgreSQL and does not serve as the sole source of critical information.
+
+The initial builder and its current limitations are described in [Graph builder](GRAPH.md).
+
+Application membership and required flows are stored in PostgreSQL. An application view combines explicitly selected members with dynamically derived paths and controls for those flows. Alternative paths and shared dependencies remain visible when supported by evidence. Without defined flows, dependency analysis is incomplete.
+
+## Results and recommendations
+
+API results identify the analyzed flow and snapshots, path steps, route decisions, packet transformations, policy evaluations, evidence, and any uncertainty. Recommendations identify the enforcement device, native policy context, source and destination, zones, service, action, applicable interfaces, validity and rule placement when known. An unspecified validity period must not imply a permanent rule.
+
+Policy-effectiveness findings identify the native rule ID and device, analyzed flow, evidence, coverage and limitations. A rule that permits one flow locally may still be ineffective end to end, but that alone does not establish that the entire rule is unused or safe to delete. Duplicate, shadowed or expired-rule findings require sufficient platform-specific evidence; usage claims require usage data. Navis provides findings for external review and does not deploy changes.
+
+## Adapter integrity and ingestion
+
+An approved artifact registry records adapter product, version, executable digest and approval status. The runtime verifies trusted adapter bytes before execution and rejects unknown, revoked or mismatched artifacts, recording the failure. Approvals and expected hashes come from a trusted administrative release process, never from the submitted payload. See [PostgreSQL schema design](SCHEMA.md) for the proposed records and execution boundary.
+
+Authenticated transport, application identity, authorization and payload validation protect ingestion independently. A hash mismatch indicates an integrity failure; it cannot by itself establish the cause or authenticate a collector. External collectors retain responsibility for their own executables and device access.
+
+For production deployments, a trusted ingress such as Apache HTTP Server can enforce client-certificate authentication with mTLS in addition to Navis application authentication and scope checks. Direct access to the API must be restricted; forwarded certificate identities must be injected only by the trusted ingress after stripping caller-supplied identity headers. Certificate identity must be mapped to an authorized consumer. The detailed trust boundary and current implementation status are in [API design](API.md).

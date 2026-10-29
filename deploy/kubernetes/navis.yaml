@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: navis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: navis}
+  template:
+    metadata:
+      labels: {app: navis}
+    spec:
+      containers:
+        - name: navis
+          image: navis:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: NAVIS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: navis-test, key: database-url}}
+            - name: NAVIS_LOCAL_TOKEN
+              valueFrom: {secretKeyRef: {name: navis-test, key: token}}
+            - name: NAVIS_LOCAL_ISSUER
+              value: navis-local
+            - name: NAVIS_LOCAL_SUBJECT
+              value: local-test
+            - name: NAVIS_LOCAL_SCOPES
+              value: "inventory:write graph:read analysis:run analysis:read"
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 8000}
+          livenessProbe:
+            httpGet: {path: /health/live, port: 8000}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: navis
+spec:
+  selector: {app: navis}
+  ports:
+    - port: 8000
+      targetPort: 8000
