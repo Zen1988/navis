@@ -1,0 +1,25 @@
+{
+  "source": {
+    "namespace": "collector-site-a",
+    "external_device_id": "router-a"
+  },
+  "adapter": {
+    "name": "navis",
+    "input_format": "normalized-json",
+    "format_version": "1"
+  },
+  "data_type": "neighbor",
+  "collected_at": "2026-10-30T04:00:00Z",
+  "completeness": "partial",
+  "payload": {
+    "entries": [
+      {
+        "interface": "GigabitEthernet0/0",
+        "vrf": "BLUE",
+        "ip": "192.0.2.254",
+        "mac": "00:11:22:33:44:55",
+        "state": "reachable"
+      }
+    ]
+  }
+}

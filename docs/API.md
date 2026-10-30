@@ -1,66 +1,12 @@
-# API foundation
+# Navis API documentation
 
-> Status note: several older descriptions below predate the prototype worker, graph and trace improvements. See [STATUS.md](STATUS.md) and the source code for the current state. Fixture-specific tests do not establish production readiness.
+The current consumer reference is the [API integration guide](INTEGRATION_API.md). It covers every implemented endpoint, authorization, ingestion and normalization contracts, graph/trace responses, recommendations, error handling, retries and client examples.
 
-The FastAPI application is `navis_api.main:app`. Install the project and run `uvicorn navis_api.main:app`. Liveness is available at `/health/live`; readiness remains 503 until authentication and processing are implemented. The application endpoint requires a bearer token with `application:read`, and currently returns 503 after authentication because storage is not implemented.
+Companion artifacts:
 
-`POST /v1/ingestions` accepts a common JSON envelope with source namespace and external device ID, optional claimed Navis UUID, adapter name/input format/version, data type, timezone-aware collection time, completeness, and a JSON object payload. It requires `inventory:write`. The optional PostgreSQL processor checks an issuer-bound active consumer and source-specific `consumer_data_scope` permission, then stores the raw submission transactionally as `pending_identity`. A claimed device is not an association. Identity resolution, device authorization and approved adapter execution remain unimplemented. The default processor returns 503 and stores nothing; an operator must explicitly configure the database processor and a trusted verifier. Request size limits must be enforced at ingress and in the application before production.
+- [Generated OpenAPI snapshot](api/openapi.json)
+- [Complete request examples](api/examples/)
+- [Contract verification script and instructions](api/README.md)
+- [Implementation status and remaining work](STATUS.md)
 
-The shared `navis_common.auth` module defines the principal and verifier contract. The default verifier rejects every token. This interface is an extension point, not an implemented authentication provider; HTTP-specific enforcement belongs to the API. External OAuth/OIDC support must validate signatures, issuer, audience, expiry and scopes using a maintained library. Local application credentials require an explicit design for secret hashing, issuance, expiry, rotation, revocation, secure bootstrap and audit; no local OAuth server or credential management is implemented. Device credentials remain external.
-
-Trace requests may include `source_port` for an exploratory reverse trace. Translated flows return modeled reverse NAT packet mappings, but established session state and traversal through the mappings are not verified. The current reverse trace is a separate analysis using the same graph build and may observe a later database transaction; it is not an established bidirectional verdict.
-
-`POST /v1/traces` accepts `graph_build_id`, `caller_session_id`, `source`, `destination`, `protocol`, and optional `source_port`, `destination_port`, and `application`. Host IP lists expand into a deduplicated Cartesian product limited to 1,000 flows. `application` is an explicitly supplied scenario identity, not proof of runtime App-ID classification; application-dependent matches without identity remain unknown. The endpoint requires `analysis:run`; its default processor returns 503. The optional PostgreSQL processor authorizes snapshot sources and evaluates candidate paths, policy and NAT evidence while preserving uncertainty for incomplete coverage. It is not configured automatically; see STATUS.md for validation limits.
-
-Trace requests also require a caller-chosen `caller_session_id`, unique within the authenticated consumer. With a configured session store, successful trace responses include `TRACE_RESULT_READY`, that caller ID and a Navis trace session UUID. `GET /v1/trace-sessions/{caller_session_id}/recommendations` requires `analysis:read` and checks session ownership and expiry. Sessions and recommendation drafts are persisted in PostgreSQL for a default 24 hours, not PostgreSQL temporary tables. The draft is initially pending: rule generation and the worker to populate it are not implemented. The trace processor and session store are disabled by default, and duplicate-session error handling, session cleanup and database integration testing remain outstanding.
-
-Before enabling the API, implement persistent application data and scope boundaries, authentication providers, TLS at a trusted ingress, request limits and audit logging. Do not expose this draft as a production service.
-
-## Production ingress and application authentication
-
-For production, deploy Navis behind a trusted TLS ingress, such as Apache HTTP Server configured for mutual TLS (mTLS). The ingress validates the collector's client certificate against an approved certificate authority and applies certificate expiration and revocation policy. Ordinary HTTPS alone authenticates the server, not the collector. Restrict direct access to Navis so callers cannot bypass the ingress.
-
-The ingress must remove client-supplied identity headers and inject a verified, canonical certificate identity only after successful verification. Protect and authenticate the ingress-to-Navis connection, and configure Navis to trust identity headers only from that ingress. Define an explicit mapping from certificate identity to `api_consumer`; certificate identity is not an authorization scope by itself. Certificate issuance, renewal and revocation remain infrastructure responsibilities.
-
-Navis application authentication remains a separate layer: a future external OAuth/OIDC provider or local credential provider validates bearer credentials, and Navis enforces scopes and data boundaries. A deployment may require both a valid client certificate at ingress and a valid application credential at Navis. If both are required, configure which certificate identities may act for which application principals; reject absent, untrusted or inconsistent identity. This policy must be explicit and fail closed. mTLS is an ingress option, not a replacement for application authorization.
-
-Neither Apache configuration, forwarded-certificate identity validation, certificate-to-consumer mapping, nor token providers are implemented in this repository yet. The current API rejects all bearer tokens and is not production-ready.
-
-## Draft normalization worker
-
-`navis_api.worker.process_submission` is a manual worker entry point. It resolves a time-valid external identity, requires an approved digest for the built-in `navis` / `normalized-json` version `1` adapter, and transactionally writes a snapshot, raw payload, coverage, normalization run, and normalized rows. Apply migrations 001 through 003 first. The digest check is a draft guard: the module is imported before the digest is checked and dependencies are not verified, so it is not a secure execution boundary. Use only in a trusted sandbox until replaced by a verified deployment and execution mechanism.
-
-The normalized adapter accepts `{"entries": [...]}` for MAC, route, interface, neighbor, policy and NAT records. Policy and NAT records require selectors as described below. Each submission produces a separate snapshot with coverage for only its data type. Other accepted ingestion types are stored raw without normalization. Native vendor adapters, processing queue, reconciliation API, and graph projection remain unimplemented.
-
-For other accepted data types, the worker preserves the payload in `raw_payload` and marks the submission `raw_only`; it does not claim normalization. This still requires the approved built-in adapter identity and a resolved source mapping. A raw-only payload must not be treated as normalized evidence.
-
-Policy and NAT entries additionally require `selectors`: objects containing `role`, `kind`, `value`, and `negated`. Policy and NAT entries may have empty selector lists to represent unresolved conditions. Supported kinds are `address` (host or CIDR), `service`, `zone`, `interface`, and `any` (null value). Service values require `protocol`, `destination_port_start`, and `destination_port_end`; optional `source_port_start` and `source_port_end` must appear together. TCP services may include `tcp_flags_all` and `tcp_flags_any` arrays, containing lowercase TCP flag names. Every flag in the first array and at least one flag in the second must match when the arrays are nonempty. Missing packet fields yield unknown matches. Roles distinguish source, destination, service, source zone, destination zone and interface. Unknown conditions, groups, schedules and address ranges are not yet modeled by this contract; imported rules remain marked incomplete and must not produce definitive decisions. Policy `details.statefulness` can explicitly specify `stateless`, `stateful`, or `unknown` (default); entries in one rule set must agree. This does not establish session support.
-
-Interface entries accept optional `native_id`, `parent` (parent native ID in the same submission), `vrf`, `operational_state`, `vlans` and `config`. VLANs and config are preserved in interface details; they do not yet create segment membership. Migration 005 provides an explicit graph dataset selecting one snapshot per device and data type. A future graph builder must reconcile interface native IDs across snapshots for the same device, verify completeness and collection times, and avoid inferring links from matching names alone. Route and MAC placeholder interface identifiers must be stable native IDs for this reconciliation.
-
-## Application conditions, NAT stages and route extensions
-
-Policy `details.application_condition` preserves `applications` (names or null), boolean `any_application`, `application_default` and `complete`, `default_services` (application/protocol/start/end records), and optional `incomplete_applications`. The common matcher intersects this condition with selectors; application-default ports remain paired with their application identity. `details.zone_relation` supports universal, intrazone, interzone and unknown. These conditions are validated and survive database storage/readback. They do not override the worker's forced `selectors_complete=false`.
-
-NAT entries accept optional `details` for native identity, scope, uncertainty and packet-stage evidence. The PostgreSQL trace reader supports `original_addresses_pre_nat_zones_then_post_nat_zone_policy`: resolve original egress for NAT matching, then translated egress for policy zones, while retaining original policy addresses and ports. Missing verified routing or zone context remains unknown. Dynamic allocation modes require runtime evidence.
-
-Route entries accept optional `route_type` (forward, connected, discard) and `details`. Next hop and interface may be null: a forward route needs at least one, a connected route requires an interface, and a discard route has neither. This preserves direct, recursive and discard behavior without invented gateway addresses. Source route evidence remains in details; configured/active-RIB records do not assert installed-FIB coverage.
-
-## Ordered and inline policy layers
-
-Policy details may preserve nested `inline_rules`, `inline_default` (allow/deny/unknown) and `inline_complete`. Inline evaluation occurs only after its parent matches and its conditions are established; the child result ends that parent match, including cleanup. It does not fall through to a later parent rule. Nested selectors/details are validated with a depth limit. The common `evaluate_ordered_layers` helper requires every ordered layer to allow, advancing after Accept and stopping on deny/unknown. Check Point records retain package layer order and native scope identities. Imported parent/child conditions remain incomplete until validated coverage is explicitly established.
-
-## Workload/NIC enforcement conditions
-
-Policy `details.workload_condition` contains `vif_external_id`, `direction` (IN/OUT/IN_OUT/UNKNOWN), `ip_protocol` (IPV4/IPV6/IPV4_IPV6/UNKNOWN), and boolean `complete`. It intersects packet matching with the actual enforcement NIC and workload-relative direction. The PostgreSQL reader derives the VIF and direction from ingress/egress interface IDs; missing or ambiguous NIC context remains unknown. NSX output uses one enforcement point per NIC while grouping a selected VM's NICs into one policy/interface snapshot pair. This condition does not establish realized DFW, host preparation, exclusions, session state or capacity coverage.
-# Avi load-balancer evidence
-
-Trace flow results include `load_balancer_evidence` from `avi_load_balancer_evidence` version 1 raw topology records selected by the authorized graph build. Matching VIP/listener entries retain frontend connection fields and possible backend connection addresses/ports, pool identities and configured source-translation modes. Selection, health, allocated source address/port and connectivity remain unknown. Candidate output is bounded and marks truncation. See [AVI.md](AVI.md).
-
-Avi NAT entries use `translation_kind=load_balance` and `processing_stage=load_balancer_frontend_backend_connections`. These preserve configuration; the generic deterministic NAT evaluator does not execute them as ordinary destination NAT. Configured VRF routes and VIP interfaces do not establish installed Service Engine forwarding or placement.
-
-F5 BIG-IP uses the same candidate interface from `f5_load_balancer_evidence` version 1, with `evidence_kind` distinguishing the vendor payload. Native virtual/pool full paths and partition/route-domain scope are preserved. Address/port translation switches and source-translation modes are configuration intent; health, virtual selection, source allocation and connectivity remain unknown. See [F5.md](F5.md).
-
-## IOS interface ACL conditions
-
-Policy details can carry `interface_condition` with `native_id`, `direction` (`in`/`out`) and `ip_version` (4/6). Common/PostgreSQL matching uses actual ingress/egress native IDs and packet family. Missing/wrong attachment cannot apply that ACL's implicit default to another traversal. IOS imports retain incomplete selectors; `ios_inside_outside_unverified` NAT records have unverified stages. `ios_device_evidence` topology preserves native and translated evidence without establishing connectivity. See [IOS.md](IOS.md).
+The guide supersedes the earlier API foundation notes. Ingestion acceptance is staging, normalization/build preparation remains a separate operational step, and candidate evidence must not be treated as confirmed end-to-end connectivity. See the guide for exact implemented behavior and deployment prerequisites.

@@ -1,0 +1,58 @@
+{
+  "source": {
+    "namespace": "collector-site-a",
+    "external_device_id": "firewall-a"
+  },
+  "adapter": {
+    "name": "navis",
+    "input_format": "normalized-json",
+    "format_version": "1"
+  },
+  "data_type": "nat",
+  "collected_at": "2026-10-30T04:00:00Z",
+  "completeness": "partial",
+  "payload": {
+    "entries": [
+      {
+        "enforcement_point": "firewall-a:vsys1",
+        "rule_set": "nat",
+        "processing_stage": "before_route_after_policy",
+        "rule_id": "dnat-web",
+        "position": 10,
+        "enabled": true,
+        "translation_kind": "destination",
+        "translation": {
+          "address": "198.51.100.5",
+          "port": 443
+        },
+        "selectors": [
+          {
+            "role": "source",
+            "kind": "any",
+            "value": null,
+            "negated": false
+          },
+          {
+            "role": "destination",
+            "kind": "address",
+            "value": "203.0.113.5/32",
+            "negated": false
+          },
+          {
+            "role": "service",
+            "kind": "service",
+            "value": {
+              "protocol": "tcp",
+              "destination_port_start": 8443,
+              "destination_port_end": 8443
+            },
+            "negated": false
+          }
+        ],
+        "details": {
+          "selectors_complete": false
+        }
+      }
+    ]
+  }
+}

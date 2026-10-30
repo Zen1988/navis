@@ -15,6 +15,8 @@ Navis is a vendor-neutral connectivity intelligence engine designed to analyze, 
 
 For the current development status, known gaps and next steps, see [Project status](docs/STATUS.md). The project remains a prototype and the vision below is not a claim that all capabilities are complete.
 
+For integrations from other projects, see the [API integration guide](docs/INTEGRATION_API.md), [OpenAPI snapshot](docs/api/openapi.json) and [validated request examples](docs/api/examples/).
+
 Navis answers a simple question:
 
 ```text

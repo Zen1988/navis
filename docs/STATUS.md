@@ -8,6 +8,8 @@ External Ansible, Salt or other collectors retrieve native device data using cre
 
 ## Current state
 
+External projects should use the [API integration guide](INTEGRATION_API.md), [OpenAPI snapshot](api/openapi.json) and [verified request/response examples](api/README.md). Ingestion acceptance, worker processing, graph preparation and connectivity evidence are separate stages.
+
 | Area | Implemented or demonstrated | Remaining work |
 | --- | --- | --- |
 | Database | PostgreSQL schema, migrations 001–015, source and consumer scopes, device identity mappings, snapshots, raw and normalized records, trace sessions and ACI evidence views. | Migrations need a tracked migration runner, upgrade testing and operational hardening. Device/fabric identity reconciliation and richer normalized data models remain incomplete. |

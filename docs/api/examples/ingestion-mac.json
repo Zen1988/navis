@@ -1,0 +1,23 @@
+{
+  "source": {
+    "namespace": "collector-site-a",
+    "external_device_id": "router-a"
+  },
+  "adapter": {
+    "name": "navis",
+    "input_format": "normalized-json",
+    "format_version": "1"
+  },
+  "data_type": "mac",
+  "collected_at": "2026-10-30T04:00:00Z",
+  "completeness": "partial",
+  "payload": {
+    "entries": [
+      {
+        "interface": "GigabitEthernet0/0",
+        "mac": "0011.2233.4455",
+        "vlan": 100
+      }
+    ]
+  }
+}

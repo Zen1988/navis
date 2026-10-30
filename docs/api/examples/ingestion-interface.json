@@ -1,0 +1,31 @@
+{
+  "source": {
+    "namespace": "collector-site-a",
+    "external_device_id": "router-a"
+  },
+  "adapter": {
+    "name": "navis",
+    "input_format": "normalized-json",
+    "format_version": "1"
+  },
+  "data_type": "interface",
+  "collected_at": "2026-10-30T04:00:00Z",
+  "completeness": "partial",
+  "payload": {
+    "entries": [
+      {
+        "name": "GigabitEthernet0/0",
+        "native_id": "GigabitEthernet0/0",
+        "kind": "physical",
+        "vrf": "BLUE",
+        "addresses": [
+          "192.0.2.1/24"
+        ],
+        "operational_state": "up",
+        "config": {
+          "evidence": "collected"
+        }
+      }
+    ]
+  }
+}

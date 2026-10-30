@@ -1,0 +1,25 @@
+{
+  "source": {
+    "namespace": "collector-site-a",
+    "external_device_id": "firewall-a"
+  },
+  "adapter": {
+    "name": "navis",
+    "input_format": "normalized-json",
+    "format_version": "1"
+  },
+  "data_type": "security_zone",
+  "collected_at": "2026-10-30T04:00:00Z",
+  "completeness": "partial",
+  "payload": {
+    "entries": [
+      {
+        "enforcement_point": "firewall-a:vsys1",
+        "zone": "trust",
+        "interfaces": [
+          "ethernet1/1"
+        ]
+      }
+    ]
+  }
+}

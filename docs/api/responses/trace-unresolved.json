@@ -1,0 +1,198 @@
+{
+  "code": "TRACE_RESULT_READY",
+  "caller_session_id": "myproject-20261030-7b1c4d",
+  "trace_session_id": "40000000-0000-4000-8000-000000000001",
+  "graph_build_id": "20000000-0000-4000-8000-000000000001",
+  "results": [
+    {
+      "source": "192.0.2.10",
+      "destination": "198.51.100.5",
+      "protocol": "tcp",
+      "destination_port": 443,
+      "status": "unknown",
+      "verdict": {
+        "status": "unknown",
+        "scope": "end_to_end",
+        "blocking_point": null,
+        "reason": "End-to-end route, NAT and policy coverage is not established",
+        "rule_id": null
+      },
+      "destination_candidates": [],
+      "source_candidates": [],
+      "route_candidates": [],
+      "hops": [],
+      "alternative_paths": null,
+      "coverage": {
+        "devices": [],
+        "policy": {
+          "complete": false,
+          "findings": [
+            "No evaluated hops"
+          ]
+        },
+        "destination_reached": false,
+        "relational_evidence_unchanged": true,
+        "forwarding": {
+          "complete": false,
+          "findings": [
+            "Destination was not reached",
+            "No forwarding hops"
+          ]
+        },
+        "forwarding_semantics_verified": false,
+        "complete": false,
+        "return_policy": [],
+        "return_path_verified": false,
+        "missing": [
+          "forwarding",
+          "policy",
+          "nat",
+          "return_path",
+          "alternative_paths"
+        ]
+      },
+      "findings": [
+        {
+          "code": "SOURCE_UNRESOLVED",
+          "device_id": null,
+          "message": "Source device or interface information is missing."
+        },
+        {
+          "code": "DESTINATION_UNRESOLVED",
+          "device_id": null,
+          "message": "Destination device or interface information is missing."
+        }
+      ],
+      "reasons": [
+        "Candidate traversal only; route selection, NAT and policy evaluation are incomplete",
+        "Destination interface not found; NAT and incomplete inventory may affect resolution",
+        "Source resolution is missing or ambiguous"
+      ],
+      "aci_policy_evidence": {
+        "candidates": [],
+        "status": "unknown",
+        "truncated": false
+      },
+      "load_balancer_evidence": {
+        "candidates": [],
+        "status": "unknown",
+        "truncated": false
+      },
+      "reverse_trace": {
+        "status": "unknown",
+        "reason": "return route not verified; no stateless reverse policy trace requested"
+      },
+      "connection_verdict": {
+        "status": "unknown",
+        "missing": [
+          "forwarding",
+          "nat",
+          "policy",
+          "return_path",
+          "alternative_paths"
+        ],
+        "components": {
+          "forwarding": "unknown",
+          "nat": "unknown",
+          "policy": "unknown",
+          "return_path": "unknown"
+        }
+      }
+    },
+    {
+      "source": "192.0.2.11",
+      "destination": "198.51.100.5",
+      "protocol": "tcp",
+      "destination_port": 443,
+      "status": "unknown",
+      "verdict": {
+        "status": "unknown",
+        "scope": "end_to_end",
+        "blocking_point": null,
+        "reason": "End-to-end route, NAT and policy coverage is not established",
+        "rule_id": null
+      },
+      "destination_candidates": [],
+      "source_candidates": [],
+      "route_candidates": [],
+      "hops": [],
+      "alternative_paths": null,
+      "coverage": {
+        "devices": [],
+        "policy": {
+          "complete": false,
+          "findings": [
+            "No evaluated hops"
+          ]
+        },
+        "destination_reached": false,
+        "relational_evidence_unchanged": true,
+        "forwarding": {
+          "complete": false,
+          "findings": [
+            "Destination was not reached",
+            "No forwarding hops"
+          ]
+        },
+        "forwarding_semantics_verified": false,
+        "complete": false,
+        "return_policy": [],
+        "return_path_verified": false,
+        "missing": [
+          "forwarding",
+          "policy",
+          "nat",
+          "return_path",
+          "alternative_paths"
+        ]
+      },
+      "findings": [
+        {
+          "code": "SOURCE_UNRESOLVED",
+          "device_id": null,
+          "message": "Source device or interface information is missing."
+        },
+        {
+          "code": "DESTINATION_UNRESOLVED",
+          "device_id": null,
+          "message": "Destination device or interface information is missing."
+        }
+      ],
+      "reasons": [
+        "Candidate traversal only; route selection, NAT and policy evaluation are incomplete",
+        "Destination interface not found; NAT and incomplete inventory may affect resolution",
+        "Source resolution is missing or ambiguous"
+      ],
+      "aci_policy_evidence": {
+        "candidates": [],
+        "status": "unknown",
+        "truncated": false
+      },
+      "load_balancer_evidence": {
+        "candidates": [],
+        "status": "unknown",
+        "truncated": false
+      },
+      "reverse_trace": {
+        "status": "unknown",
+        "reason": "return route not verified; no stateless reverse policy trace requested"
+      },
+      "connection_verdict": {
+        "status": "unknown",
+        "missing": [
+          "forwarding",
+          "nat",
+          "policy",
+          "return_path",
+          "alternative_paths"
+        ],
+        "components": {
+          "forwarding": "unknown",
+          "nat": "unknown",
+          "policy": "unknown",
+          "return_path": "unknown"
+        }
+      }
+    }
+  ]
+}

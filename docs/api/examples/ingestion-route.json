@@ -1,0 +1,28 @@
+{
+  "source": {
+    "namespace": "collector-site-a",
+    "external_device_id": "router-a"
+  },
+  "adapter": {
+    "name": "navis",
+    "input_format": "normalized-json",
+    "format_version": "1"
+  },
+  "data_type": "route",
+  "collected_at": "2026-10-30T04:00:00Z",
+  "completeness": "partial",
+  "payload": {
+    "entries": [
+      {
+        "vrf": "BLUE",
+        "destination": "203.0.113.0/24",
+        "next_hop": "192.0.2.254",
+        "interface": "GigabitEthernet0/0",
+        "route_type": "forward",
+        "details": {
+          "evidence": "configured_unverified"
+        }
+      }
+    ]
+  }
+}

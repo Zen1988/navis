@@ -1,0 +1,11 @@
+{
+  "code": "RECOMMENDATIONS_UNAVAILABLE",
+  "caller_session_id": "myproject-20261030-7b1c4d",
+  "trace_session_id": "40000000-0000-4000-8000-000000000001",
+  "recommendations": [
+    {
+      "status": "unavailable",
+      "result": null
+    }
+  ]
+}

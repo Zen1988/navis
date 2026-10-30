@@ -1,0 +1,9 @@
+{
+  "graph_build_id": "20000000-0000-4000-8000-000000000001",
+  "caller_session_id": "myproject-20261030-7b1c4d",
+  "source": "192.0.2.10;192.0.2.11",
+  "destination": "198.51.100.5",
+  "protocol": "tcp",
+  "source_port": 51000,
+  "destination_port": 443
+}
