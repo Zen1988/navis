@@ -27,7 +27,7 @@ def reverse_session_packet(original: Packet, translated: Packet) -> tuple[Packet
     return translated_reply, original_reply
 
 
-def evaluate_nat(rules, packet, *, complete):
+def evaluate_nat(rules, packet, *, complete, source_zone=None, destination_zone=None, interface=None):
     """Return packet and evidence; unsupported behavior always remains unknown.
 
     Input rules must already be scoped and ordered by the platform adapter.
@@ -36,7 +36,8 @@ def evaluate_nat(rules, packet, *, complete):
         if not rule.get("enabled", True):
             continue
         match = evaluate_rule(rule["selectors"], packet.source, packet.destination,
-                              packet.protocol, packet.destination_port)
+                              packet.protocol, packet.destination_port, source_port=packet.source_port,
+                              source_zone=source_zone, destination_zone=destination_zone, interface=interface)
         if match is False:
             continue
         if match is None or not rule.get("selectors_complete", False):

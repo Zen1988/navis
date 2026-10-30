@@ -5,9 +5,24 @@
   gather_facts: true
   vars:
     panorama_output_dir: ./panorama-output
-    # The caller supplies firewall serials; discovery of managed devices and
-    # Panorama inheritance is intentionally separate from this example.
+    # The caller supplies firewall serials. Native hierarchy and pushed data
+    # provide policy context; successful collection does not prove deployment.
+    panorama_queries:
+      - name: panorama-config
+        form: {type: config, action: show, xpath: '/config'}
+      - name: device-group-hierarchy
+        form: {type: op, cmd: '<show><dg-hierarchy></dg-hierarchy></show>'}
     pan_queries:
+      # Full running configuration preserves VSYS and shared-object ancestry.
+      # Protect this file: unrelated device configuration can contain secrets.
+      - name: running-config
+        form: {type: config, action: show, xpath: '/config'}
+      - name: pushed-config
+        form: {type: config, action: get, xpath: '/config/panorama'}
+      - name: applications
+        form: {type: config, action: get, xpath: '/config/predefined/application'}
+      - name: routes
+        form: {type: op, cmd: '<show><routing><route></route></routing></show>'}
       - name: system-info
         form: {type: op, cmd: '<show><system><info></info></system></show>'}
       - name: security-rulebase
@@ -42,6 +57,36 @@
         path: "{{ panorama_output_dir }}"
         state: directory
         mode: '0700'
+
+    - name: Read native Panorama hierarchy and configuration without a firewall target
+      ansible.builtin.uri:
+        url: "https://{{ panorama_host }}/api/"
+        method: POST
+        headers:
+          X-PAN-KEY: "{{ panorama_api_key }}"
+        body_format: form-urlencoded
+        body: "{{ item.form }}"
+        validate_certs: true
+        return_content: true
+        status_code: 200
+      loop: "{{ panorama_queries }}"
+      register: panorama_results
+      no_log: true
+
+    - name: Verify native Panorama responses
+      ansible.builtin.assert:
+        that:
+          - item.content is search('status="success"')
+      loop: "{{ panorama_results.results }}"
+      no_log: true
+
+    - name: Save native Panorama responses
+      ansible.builtin.copy:
+        dest: "{{ panorama_output_dir }}/{{ item.item.name }}.xml"
+        mode: '0600'
+        content: "{{ item.content }}"
+      loop: "{{ panorama_results.results }}"
+      no_log: true
 
     - name: Collect each targeted firewall
       ansible.builtin.include_tasks: firewall.yml

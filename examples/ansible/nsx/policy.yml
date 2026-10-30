@@ -1,0 +1,13 @@
+---
+- name: Validate discovered policy path and export identifier
+  ansible.builtin.assert:
+    that:
+      - nsx_policy.id is match('^[A-Za-z0-9_-]+$')
+      - nsx_policy.path == '/infra/domains/' ~ nsx_domain ~ '/security-policies/' ~ nsx_policy.id
+
+- name: Collect all rules for the discovered policy
+  ansible.builtin.include_tasks: resource.yml
+  vars:
+    nsx_resource:
+      name: "policy-{{ nsx_policy.id }}-rules"
+      path: "/policy/api/v1{{ nsx_policy.path }}/rules"

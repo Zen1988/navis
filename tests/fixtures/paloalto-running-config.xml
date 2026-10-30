@@ -1,0 +1,39 @@
+<response status="success"><result><config version="11.1">
+  <shared>
+    <address><entry name="shared-client"><ip-netmask>192.0.2.99</ip-netmask></entry>
+      <entry name="server"><ip-netmask>198.51.100.10/32</ip-netmask></entry>
+      <entry name="v6"><ip-netmask>2001:db8::/64</ip-netmask></entry>
+      <entry name="small-range"><ip-range>192.0.2.8-192.0.2.11</ip-range></entry>
+      <entry name="dns-name"><fqdn>example.invalid</fqdn></entry></address>
+    <address-group><entry name="dynamic"><dynamic><filter>'production'</filter></dynamic></entry></address-group>
+    <service><entry name="https"><protocol><tcp><port>443,8443-8444</port><source-port>1024-65535</source-port></tcp></protocol></entry>
+      <entry name="dns"><protocol><udp><port>53</port></udp></protocol></entry></service>
+    <service-group><entry name="web"><members><member>https</member></members></entry></service-group>
+  </shared>
+  <devices><entry name="localhost.localdomain"><vsys>
+    <entry name="vsys1">
+      <address><entry name="client"><ip-netmask>192.0.2.5/32</ip-netmask></entry></address>
+      <address-group><entry name="clients"><static><member>client</member><member>small-range</member></static></entry>
+        <entry name="nested"><static><member>clients</member><member>v6</member></static></entry></address-group>
+      <zone><entry name="trust"><network><layer3><member>ethernet1/1</member><member>ethernet1/1.10</member></layer3></network></entry>
+        <entry name="untrust"><network><layer3><member>ethernet1/2</member></layer3></network></entry></zone>
+      <rulebase><security><rules>
+        <entry name="block-client" uuid="test-block"><from><member>trust</member></from><to><member>untrust</member></to>
+          <source><member>client</member></source><destination><member>server</member></destination>
+          <application><member>any</member></application><service><member>web</member></service><action>reset-both</action></entry>
+        <entry name="allow-web" uuid="test-web"><from><member>trust</member></from><to><member>untrust</member></to>
+          <source><member>nested</member></source><destination><member>server</member></destination>
+          <application><member>any</member></application><service><member>web</member></service><action>allow</action></entry>
+        <entry name="appid"><from><member>any</member></from><to><member>any</member></to>
+          <source><member>any</member></source><destination><member>any</member></destination>
+          <application><member>ssl</member></application><service><member>application-default</member></service><action>allow</action></entry>
+        <entry name="disabled"><from><member>any</member></from><to><member>any</member></to>
+          <source><member>any</member></source><destination><member>any</member></destination>
+          <application><member>any</member></application><service><member>any</member></service><action>deny</action><disabled>yes</disabled></entry>
+      </rules></security></rulebase>
+    </entry>
+    <entry name="vsys2"><address><entry name="client"><ip-netmask>203.0.113.1</ip-netmask></entry></address>
+      <rulebase><security><rules><entry name="isolated"><source><member>client</member></source></entry></rules></security></rulebase>
+    </entry>
+  </vsys></entry></devices>
+</config></result></response>

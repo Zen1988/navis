@@ -3,7 +3,14 @@
   ansible.builtin.set_fact:
     nsx_cursor: ''
     nsx_page_number: 0
+    nsx_resource_results: []
+    nsx_seen_cursors: []
   no_log: true
 
 - name: Fetch first and remaining pages
   ansible.builtin.include_tasks: page.yml
+
+- name: Retain discovered native resources for dependent read-only collection
+  ansible.builtin.set_fact:
+    nsx_collected_resources: "{{ nsx_collected_resources | default({}) | combine({nsx_resource.name: nsx_resource_results}) }}"
+  no_log: true

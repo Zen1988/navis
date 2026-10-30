@@ -1,0 +1,14 @@
+---
+- name: Validate group path and export identifier
+  ansible.builtin.assert:
+    that:
+      - nsx_group.id is match('^[A-Za-z0-9_-]+$')
+      - nsx_group.path == '/infra/domains/' ~ nsx_domain ~ '/groups/' ~ nsx_group.id
+
+- name: Collect resolved VM membership without interpreting display names as identities
+  ansible.builtin.include_tasks: resource.yml
+  vars:
+    nsx_resource:
+      name: "group-{{ nsx_group.id }}-vms"
+      path: "/policy/api/v1{{ nsx_group.path }}/members/virtual-machines"
+  when: nsx_group.group_type | default([]) != ['IPAddress']

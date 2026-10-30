@@ -160,9 +160,11 @@ def translate_semantics(inventory):
                   "destination_ports": None, "source_ports": None, "status": "partial"}
         for field, key in (("d", "destination_ports"), ("s", "source_ports")):
             first, last = attrs.get(field + "FromPort"), attrs.get(field + "ToPort")
+            if first == last and first in ("unspecified", "0"):
+                result[key] = {"start": 0, "end": 65535}
             if isinstance(first, str) and isinstance(last, str) and first.isdigit() and last.isdigit():
                 start, end = int(first), int(last)
-                if 0 <= start <= end <= 65535:
+                if 0 < start <= end <= 65535:
                     result[key] = {"start": start, "end": end}
         return result
 
@@ -307,7 +309,8 @@ def translate_semantics(inventory):
                     continue
                 subject_data = {"native_id": subject["dn"], "attributes": subject["attributes"],
                                 "reverse_filter_ports": subject["attributes"].get("revFltPorts"),
-                                "bidirectional": subject["attributes"].get("biDir"),
+                                "bidirectional": "yes" if any(c["class"] == "vzRsSubjFiltAtt" for c in children[subject["dn"]])
+                                and not any(c["class"] in ("vzInTerm", "vzOutTerm") for c in children[subject["dn"]]) else "no",
                                 "labels": [{"class": c["class"], "attributes": c["attributes"]}
                                            for c in children[subject["dn"]] if c["kind"] == "contract_label"],
                                 "exceptions": [c["attributes"] for c in children[subject["dn"]] if c["kind"] == "contract_exception"],
@@ -408,6 +411,8 @@ def translate_semantics(inventory):
                                                       "native_action": flt["action"],
                                                       "candidate_action": action,
                                                       "native_direction": flt["direction"],
+                                                      "bidirectional": subject["bidirectional"],
+                                                      "reverse_filter_ports": subject["reverse_filter_ports"],
                                                       "priority_override": flt["priority_override"],
                                                       "epg_label_match": epg_match,
                                                       "provider_subject_label_match": provider_subject_match,
@@ -415,13 +420,90 @@ def translate_semantics(inventory):
                                                       "label_evidence": "partial",
                                                       "status": "unverified",
                                                       "unresolved": candidate_unresolved})
+    directional_rules = []
+    for candidate in policy_candidates:
+        directional_rules.extend(translate_directions(candidate))
+    address_groups = []
+    for group in endpoint_groups:
+        members = sorted({str(ip_network(address, strict=False))
+                          for endpoint in group["endpoints"] for address in endpoint["addresses"]})
+        address_groups.append({"native_id": group["native_id"], "name": group["name"],
+                               "kind": "internal_epg", "members": members,
+                               "membership_source": "observed_endpoints", "complete": False,
+                               "bridge_domain": group["bridge_domain"]})
+    for network in external_networks:
+        for group in network["external_epgs"]:
+            members = sorted({subnet["prefix"] for subnet in group["subnets"]
+                              if subnet["prefix"] and "import-security" in
+                              [s.strip() for s in (subnet.get("scope") or "").split(",")]})
+            address_groups.append({"native_id": group["native_id"], "name": group["name"],
+                                   "kind": "external_epg", "members": members,
+                                   "membership_source": "external_security_prefixes", "complete": False,
+                                   "vrf": network["vrf"]})
     return {"coverage": "partial", "routes": routes, "contracts": contracts,
+            "address_groups": address_groups,
             "bridge_domains": bridge_domains, "endpoint_groups": endpoint_groups,
             "external_networks": external_networks, "devices": devices, "adjacencies": adjacencies,
             "policy_candidates": policy_candidates,
+            "directional_rules": directional_rules,
             "findings": findings,
             "limitations": ["URIB observations are not verified installed forwarding entries",
-                            "contract scope, direction, priority, enforcement and endpoint membership are not evaluated"]}
+                            "contract scope, effective priority, enforcement and complete endpoint membership are not evaluated"]}
+
+
+def translate_directions(candidate):
+    """Expand APIC subject attachments or independent directional terminals.
+
+    Every result is stateless. APIC's stateful flag adds an ACK condition on
+    provider-to-consumer TCP traffic; it never grants session-based return access.
+    Unknown settings remain unresolved rather than inventing port conditions.
+    """
+    native = candidate["native_direction"]
+    directions = []
+    if native == "vzInTerm":
+        directions = [("consumer_to_provider", False)]
+    elif native == "vzOutTerm":
+        directions = [("provider_to_consumer", False)]
+    elif native == "subject" and candidate.get("bidirectional") == "yes":
+        directions = [("consumer_to_provider", False),
+                      ("provider_to_consumer", candidate.get("reverse_filter_ports") == "yes")]
+    if not directions:
+        directions = [("unknown", False)]
+    result = []
+    for direction, swap in directions:
+        reverse = direction == "provider_to_consumer"
+        unresolved = [reason for reason in candidate["unresolved"]
+                      if reason != "direction and priority are not evaluated"]
+        unresolved.append("effective priority is not evaluated")
+        if direction == "unknown":
+            unresolved.append("subject direction settings missing or inconsistent")
+        ports_known = not (native == "subject" and reverse and
+                           candidate.get("reverse_filter_ports") not in ("yes", "no"))
+        if not ports_known:
+            unresolved.append("reverse filter port setting unresolved")
+        attrs = candidate["filter_attributes"]
+        flags = attrs.get("tcpRules")
+        stateful = attrs.get("stateful")
+        conditions = {"native_tcp_rules": flags, "native_stateful": stateful,
+                      "required_tcp_flags": ["ack"] if reverse and stateful == "yes" and candidate["protocol"] == "tcp" else []}
+        if candidate["protocol"] == "tcp" and stateful not in ("yes", "no"):
+            unresolved.append("TCP stateful flag condition unresolved")
+        if candidate["protocol"] == "tcp" and flags not in ("", "unspecified", "syn", "ack", "rst", "fin", "est"):
+            unresolved.append("native TCP flag condition requires evaluation")
+        source_ports = candidate["destination_ports"] if swap else candidate["source_ports"]
+        destination_ports = candidate["source_ports"] if swap else candidate["destination_ports"]
+        if not ports_known or direction == "unknown":
+            source_ports = destination_ports = None
+        if candidate["protocol"] in ("tcp", "udp") and (source_ports is None or destination_ports is None):
+            unresolved.append("transport port range unresolved or unsupported")
+        result.append({**candidate, "packet_direction": direction,
+                       "source_epg": candidate["provider_epg"] if reverse else candidate["consumer_epg"],
+                       "destination_epg": candidate["consumer_epg"] if reverse else candidate["provider_epg"],
+                       "source_ports": source_ports, "destination_ports": destination_ports,
+                       "ports_reversed": swap if ports_known else None,
+                       "statefulness": "stateless", "tcp_conditions": conditions,
+                       "unresolved": unresolved})
+    return result
 
 
 def fabric_evidence_submission(inventory, namespace, fabric_external_id):
@@ -443,8 +525,9 @@ def fabric_evidence_submission(inventory, namespace, fabric_external_id):
 def normalized_policy_submission(inventory, namespace, fabric_external_id):
     """Convert contract candidates to incomplete normalized policy entries.
 
-    The derived selectors are partial observations. Direction, membership,
-    precedence, and enforcement remain unknown; the worker explicitly marks
+    The derived selectors are partial observations. Native direction and port
+    reversal are translated; membership, precedence and enforcement remain
+    unverified. The worker explicitly marks
     selectors incomplete. Positions are storage order, not ACI precedence.
     """
     import hashlib
@@ -452,50 +535,49 @@ def normalized_policy_submission(inventory, namespace, fabric_external_id):
     # Reuse the identity and metadata validation for fabric-scoped submissions.
     fabric_evidence_submission(inventory, namespace, fabric_external_id)
     semantics = translate_semantics(inventory)
-    candidates = semantics["policy_candidates"]
+    candidates = semantics["directional_rules"]
     keyed = {}
     for candidate in candidates:
         identity = [candidate.get(k) for k in ("contract", "subject", "filter_relation",
-                    "filter_entry", "consumer_epg", "provider_epg", "native_direction")]
+                    "filter_entry", "consumer_epg", "provider_epg", "native_direction", "packet_direction")]
         key = hashlib.sha256(json.dumps(identity, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
         if key in keyed:
             raise ValueError("duplicate ACI policy candidate identity")
         keyed[key] = candidate
-    group_addresses = {}
-    for group in semantics["endpoint_groups"]:
-        values = set()
-        for endpoint in group["endpoints"]:
-            for address in endpoint["addresses"]:
-                values.add(str(ip_network(address, strict=False)))
-        group_addresses[group["native_id"]] = sorted(values)
-    for network in semantics["external_networks"]:
-        for group in network["external_epgs"]:
-            values = set()
-            for subnet in group["subnets"]:
-                scopes = [s.strip() for s in (subnet.get("scope") or "").split(",")]
-                if subnet["prefix"] and "import-security" in scopes:
-                    values.add(subnet["prefix"])
-            group_addresses[group["native_id"]] = sorted(values)
+    group_addresses = {group["native_id"]: group["members"] for group in semantics["address_groups"]}
     entries = []
     for position, (key, candidate) in enumerate(sorted(keyed.items()), 1):
         rule_id = "aci-candidate:" + key
         selectors = []
-        # The candidate uses consumer-to-provider orientation; directional
-        # terminals and return filters are not yet established as effective.
-        if candidate.get("native_direction") == "subject":
-            for role, group in (("source", candidate["consumer_epg"]), ("destination", candidate["provider_epg"])):
+        # Packet direction comes from native attachments, independently of
+        # effective enforcement, scope and precedence (which remain unverified).
+        if candidate["packet_direction"] != "unknown":
+            for role, group in (("source", candidate["source_epg"]), ("destination", candidate["destination_epg"])):
                 for prefix in group_addresses.get(group, []):
                     selectors.append({"role": role, "kind": "address", "value": prefix, "negated": False})
             ports = candidate.get("destination_ports")
             if candidate.get("protocol") in ("tcp", "udp") and ports:
-                selectors.append({"role": "service", "kind": "service", "value": {
+                service = {
                     "protocol": candidate["protocol"], "destination_port_start": ports["start"],
-                    "destination_port_end": ports["end"]}, "negated": False})
+                    "destination_port_end": ports["end"]}
+                source_ports = candidate["source_ports"]
+                if source_ports:
+                    service.update(source_port_start=source_ports["start"], source_port_end=source_ports["end"])
+                conditions = candidate["tcp_conditions"]
+                if conditions["required_tcp_flags"]:
+                    service["tcp_flags_all"] = conditions["required_tcp_flags"]
+                flags = conditions["native_tcp_rules"]
+                native_flags = {"syn": ["syn"], "ack": ["ack"], "rst": ["rst"],
+                                "fin": ["fin"], "est": ["ack", "rst"]}
+                if candidate["protocol"] == "tcp" and isinstance(flags, str) and flags in native_flags:
+                    service["tcp_flags_any"] = native_flags[flags]
+                selectors.append({"role": "service", "kind": "service", "value": service, "negated": False})
         entries.append({"enforcement_point": "aci-fabric:" + inventory["fabric_id"],
                         "rule_set": "aci-contract-candidates", "default_action": "unknown",
                         "rule_id": rule_id, "position": position,
                         "action": candidate.get("candidate_action") or "unknown", "enabled": True,
                         "selectors": selectors, "details": {"origin": "aci_contract_candidate",
+                        "statefulness": "stateless", "selectors_complete": False,
                         "effective_enforcement": "unknown", "position_semantics": "storage_only",
                         "selector_source": "aci_observations" if selectors else "unresolved",
                         "candidate": candidate}})

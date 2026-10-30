@@ -15,6 +15,7 @@
           - checkpoint_api_url is defined
           - checkpoint_username is defined
           - checkpoint_password is defined
+          - checkpoint_management_id is defined
           - checkpoint_api_url is match('^https://')
           - checkpoint_page_size | int > 0
           - checkpoint_page_size | int <= 500
@@ -35,7 +36,7 @@
             url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/login"
             method: POST
             body_format: json
-            body: "{{ {'user': checkpoint_username, 'password': checkpoint_password} | combine({'domain': checkpoint_domain} if checkpoint_domain is defined else {}) }}"
+            body: "{{ {'user': checkpoint_username, 'password': checkpoint_password, 'read-only': true} | combine({'domain': checkpoint_domain} if checkpoint_domain is defined else {}) }}"
             validate_certs: true
             status_code: 200
             return_content: true
@@ -46,6 +47,33 @@
           ansible.builtin.set_fact:
             checkpoint_session: "{{ checkpoint_login.json.sid }}"
           no_log: true
+
+        - name: Read native session domain identity
+          ansible.builtin.uri:
+            url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/show-session"
+            method: POST
+            headers:
+              X-chkp-sid: "{{ checkpoint_session }}"
+            body_format: json
+            body: {uid: "{{ checkpoint_login.json.uid }}", details-level: full}
+            validate_certs: true
+            status_code: 200
+            return_content: true
+          register: checkpoint_session_details
+          no_log: true
+
+        - name: Verify native domain UID is available
+          ansible.builtin.assert:
+            that:
+              - checkpoint_session_details.json.domain.uid is defined
+          no_log: true
+
+        - name: Collect referenced object inventory
+          ansible.builtin.include_tasks: query_pages.yml
+          vars:
+            checkpoint_command: show-objects
+            checkpoint_filename: objects
+            checkpoint_parameters: {}
 
         - name: Collect gateway inventory
           ansible.builtin.include_tasks: query_pages.yml
@@ -60,6 +88,17 @@
             checkpoint_command: show-packages
             checkpoint_filename: packages
             checkpoint_parameters: {}
+
+        - name: Preserve discovered package identifiers
+          ansible.builtin.set_fact:
+            checkpoint_packages: "{{ checkpoint_pages.results | map(attribute='json') | map(attribute='packages') | flatten | map(attribute='uid') | unique | list }}"
+          no_log: true
+
+        - name: Read full discovered packages
+          ansible.builtin.include_tasks: package.yml
+          loop: "{{ checkpoint_packages }}"
+          loop_control:
+            loop_var: checkpoint_package
 
         - name: Discover access layers
           ansible.builtin.include_tasks: query_pages.yml
@@ -90,7 +129,7 @@
           ansible.builtin.copy:
             dest: "{{ checkpoint_output_dir }}/metadata.json"
             mode: '0600'
-            content: "{{ {'collected_at': ansible_date_time.iso8601, 'coverage': 'partial', 'access_layers': checkpoint_access_layers, 'reason': 'selected management objects only; gateway forwarding and installed policy not verified'} | to_nice_json }}"
+            content: "{{ {'management_id': checkpoint_management_id, 'domain_uid': checkpoint_session_details.json.domain.uid, 'collected_at': ansible_date_time.iso8601, 'coverage': 'partial', 'access_layers': checkpoint_access_layers, 'packages': checkpoint_packages, 'reason': 'management policy only; gateway forwarding, implied rules and installed policy not verified'} | to_nice_json }}"
       always:
         - name: Log out of the management API
           ansible.builtin.uri:

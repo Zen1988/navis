@@ -46,21 +46,28 @@ def candidate_evidence(payloads, source, destination, protocol, destination_port
             addresses, prefixes = groups.get(group, (set(), []))
             return str(address) in addresses or any(address.version == p.version and address in p for p in prefixes)
 
-        for candidate in _list(semantics.get("policy_candidates")):
+        candidates = semantics.get("directional_rules", semantics.get("policy_candidates"))
+        for candidate in _list(candidates):
             if not isinstance(candidate, dict):
                 continue
             consumer, provider = candidate.get("consumer_epg"), candidate.get("provider_epg")
             forward = contains(consumer, src) and contains(provider, dst)
             reverse = contains(provider, src) and contains(consumer, dst)
-            if not (forward or reverse):
+            direction = candidate.get("packet_direction", "unknown")
+            membership_match = forward if direction == "consumer_to_provider" else reverse if direction == "provider_to_consumer" else forward or reverse
+            if not membership_match:
                 continue
             item_protocol = candidate.get("protocol")
             if isinstance(item_protocol, str) and item_protocol and item_protocol.lower() != protocol.lower():
                 continue
-            # Directional and reverse port interpretation is not resolved; do
-            # not filter on port and accidentally hide applicable evidence.
+            # Source ports and TCP flags may be absent from the trace request;
+            # preserve uncertainty even when direction/destination port match.
+            ports = candidate.get("destination_ports")
+            if direction != "unknown" and isinstance(ports, dict) and destination_port is not None:
+                if not ports["start"] <= destination_port <= ports["end"]:
+                    continue
             matches.append({"snapshot_id": str(snapshot), "candidate": candidate,
-                            "membership": "observed_unverified", "packet_direction": "unknown",
+                            "membership": "observed_unverified", "packet_direction": direction,
                             "service_match": "unknown", "decision": "unknown"})
             if len(matches) >= limit:
                 return {"candidates": matches, "status": "unknown", "truncated": True}

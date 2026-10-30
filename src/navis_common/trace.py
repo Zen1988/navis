@@ -10,6 +10,7 @@ class Flow:
     destination: str
     protocol: str
     destination_port: int | None
+    application: str | None = None
 
 
 def _addresses(value: str) -> list[str]:
@@ -19,8 +20,10 @@ def _addresses(value: str) -> list[str]:
     return list(dict.fromkeys(str(ip_address(part.strip())) for part in parts))
 
 
-def expand_flows(source: str, destination: str, protocol: str, destination_port: int | None = None, *, max_flows: int = 1000) -> list[Flow]:
+def expand_flows(source: str, destination: str, protocol: str, destination_port: int | None = None, *, max_flows: int = 1000, application: str | None = None) -> list[Flow]:
     sources, destinations = _addresses(source), _addresses(destination)
+    if application is not None and (not isinstance(application, str) or not application.strip()):
+        raise ValueError("application must be a named identity")
     protocol = protocol.strip().lower()
     if protocol not in ("tcp", "udp", "icmp", "icmpv6"):
         raise ValueError("unsupported protocol")
@@ -30,4 +33,4 @@ def expand_flows(source: str, destination: str, protocol: str, destination_port:
         raise ValueError("ICMP does not use a destination port")
     if len(sources) * len(destinations) > max_flows:
         raise ValueError("too many flows")
-    return [Flow(src, dst, protocol, destination_port) for src in sources for dst in destinations]
+    return [Flow(src, dst, protocol, destination_port, application) for src in sources for dst in destinations]

@@ -5,6 +5,33 @@
       - checkpoint_layer is match('^[A-Za-z0-9_-]+$')
     fail_msg: 'Discovered layer identifier is not safe as a filename.'
 
+- name: Read full layer settings including native cleanup action
+  ansible.builtin.uri:
+    url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/show-access-layer"
+    method: POST
+    headers:
+      X-chkp-sid: "{{ checkpoint_session }}"
+    body_format: json
+    body: {uid: "{{ checkpoint_layer }}", details-level: full}
+    validate_certs: true
+    status_code: 200
+    return_content: true
+  register: checkpoint_layer_response
+  no_log: true
+
+- name: Verify layer UID
+  ansible.builtin.assert:
+    that:
+      - checkpoint_layer_response.json.uid == checkpoint_layer
+  no_log: true
+
+- name: Save full access layer
+  ansible.builtin.copy:
+    dest: "{{ checkpoint_output_dir }}/layer-{{ checkpoint_layer }}.json"
+    mode: '0600'
+    content: "{{ checkpoint_layer_response.json | to_nice_json }}"
+  no_log: true
+
 - name: Collect access rulebase pages
   ansible.builtin.include_tasks: query_pages.yml
   vars:

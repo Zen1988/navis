@@ -1,0 +1,5 @@
+<response status="success"><result><application>
+  <entry name="ssl"><default><port><member>tcp/443</member></port></default></entry>
+  <entry name="database"><default><port><member>tcp/5432</member><member>udp/5433</member></port></default></entry>
+  <entry name="negotiated"><default><port><member>tcp/dynamic</member></port></default></entry>
+</application></result></response>

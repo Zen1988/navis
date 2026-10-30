@@ -141,6 +141,28 @@ class AciAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             fabric_evidence_submission(inventory, "lab", "")
 
+    def test_address_groups_keep_shared_subnet_epgs_separate(self):
+        def mo(cls, dn, **attrs):
+            return {cls: {"attributes": {"dn": dn, **attrs}}}
+        bd = "uni/tn-a/BD-shared"
+        client, server = "uni/tn-a/ap-app/epg-client", "uni/tn-a/ap-app/epg-server"
+        classes = {
+            "fvBD": [[mo("fvBD", bd)]],
+            "fvSubnet": [[mo("fvSubnet", bd + "/subnet-[10.0.0.1/24]", ip="10.0.0.1/24")]],
+            "fvAEPg": [[mo("fvAEPg", client), mo("fvAEPg", server)]],
+            "fvRsBd": [[mo("fvRsBd", group + "/rsbd", tDn=bd) for group in (client, server)]],
+            "fvCEp": [[mo("fvCEp", client + "/cep-a", ip="10.0.0.5"),
+                       mo("fvCEp", server + "/cep-b", ip="10.0.0.6")]],
+            "fvIp": [[mo("fvIp", client + "/cep-a/ip-v4", addr="10.0.0.5"),
+                      mo("fvIp", client + "/cep-a/ip-v6", addr="2001:db8::5")]],
+        }
+        groups = {g["native_id"]: g for g in translate_semantics(
+            translate_inventory(self.meta, classes))["address_groups"]}
+        self.assertEqual(groups[client]["members"], ["10.0.0.5/32", "2001:db8::5/128"])
+        self.assertEqual(groups[server]["members"], ["10.0.0.6/32"])
+        self.assertFalse(groups[client]["complete"])
+        self.assertEqual(groups[client]["bridge_domain"], bd)
+
     def test_external_epg_contract_and_l3out_mapping(self):
         def mo(cls, dn, **attrs):
             return {cls: {"attributes": {"dn": dn, **attrs}}}
@@ -170,6 +192,9 @@ class AciAdapterTests(unittest.TestCase):
         external = result["external_networks"][0]
         self.assertEqual(external["vrf"], vrf)
         self.assertEqual(external["external_epgs"][0]["subnets"][0]["prefix"], "203.0.113.0/24")
+        groups = {g["native_id"]: g for g in result["address_groups"]}
+        self.assertEqual(groups[ext]["members"], ["203.0.113.0/24"])
+        self.assertEqual(groups[epg]["members"], ["192.0.2.5/32"])
         self.assertEqual(external["node_profiles"][0]["nodes"][0]["target"], "topology/pod-1/node-101")
         self.assertEqual(result["policy_candidates"][0]["source_epg"], ext)
         self.assertEqual(result["policy_candidates"][0]["destination_epg"], epg)

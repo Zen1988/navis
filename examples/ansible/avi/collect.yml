@@ -1,0 +1,42 @@
+---
+- name: Read Avi Controller routing and load-balancer configuration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    avi_output_dir: ./avi-output
+    avi_page_size: 100
+    avi_max_pages: 100
+    avi_resources: [virtualservice, vsvip, pool, poolgroup, vrfcontext, networkprofile]
+  tasks:
+    - name: Validate controller configuration
+      ansible.builtin.assert:
+        that:
+          - avi_controller_url is defined
+          - avi_controller_url is match('^https://[^/@]+(:[0-9]+)?/?$')
+          - avi_controller_id is defined
+          - avi_username is defined
+          - avi_password is defined
+          - avi_tenant_uuid is defined
+          - avi_api_version is defined
+          - avi_page_size | int > 0
+          - avi_max_pages | int > 0
+      no_log: true
+
+    - name: Create protected export directory
+      ansible.builtin.file:
+        path: "{{ avi_output_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Read tenant-scoped objects using GET only
+      ansible.builtin.include_tasks: resource.yml
+      loop: "{{ avi_resources }}"
+      loop_control:
+        loop_var: avi_resource
+
+    - name: Save collection identity without credentials
+      ansible.builtin.copy:
+        dest: "{{ avi_output_dir }}/metadata.json"
+        mode: '0600'
+        content: "{{ {'controller_id': avi_controller_id, 'controller_url': avi_controller_url | regex_replace('/+$', ''), 'tenant_uuid': avi_tenant_uuid, 'api_version': avi_api_version, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'reason': 'configured VRF/VIP/pool evidence only; SE forwarding, health, placement and sessions unverified'} | to_nice_json }}"

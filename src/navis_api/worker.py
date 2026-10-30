@@ -20,7 +20,7 @@ def _write_selectors(cur, snapshot, point_id, rule_id, selectors, policy):
             cur.execute("INSERT INTO navis.address_object(id,snapshot_id,kind,prefix,details) VALUES (%s,%s,'prefix',%s,%s)", (address_id, snapshot, str(ip_network(value, strict=False)), Jsonb({"original": value})))
         elif kind == "service":
             service_id = uuid4()
-            cur.execute("INSERT INTO navis.service_object(id,snapshot_id,protocol,destination_port_start,destination_port_end) VALUES (%s,%s,%s,%s,%s)", (service_id, snapshot, value["protocol"], value["destination_port_start"], value["destination_port_end"]))
+            cur.execute("INSERT INTO navis.service_object(id,snapshot_id,protocol,destination_port_start,destination_port_end,source_port_start,source_port_end,details) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", (service_id, snapshot, value["protocol"], value["destination_port_start"], value["destination_port_end"], value.get("source_port_start"), value.get("source_port_end"), Jsonb({key: value[key] for key in ("tcp_flags_all", "tcp_flags_any") if key in value})))
         elif kind == "zone":
             cur.execute("SELECT id FROM navis.security_zone WHERE enforcement_point_id=%s AND native_id=%s", (point_id, value))
             found = cur.fetchone()
@@ -112,7 +112,7 @@ def process_submission(connection_factory, submission_id):
                     continue
                 if kind in ("mac", "route", "neighbor"):
                     name = entry["interface"]
-                    if name not in interfaces:
+                    if name is not None and name not in interfaces:
                         interfaces[name] = uuid4()
                         cur.execute("INSERT INTO navis.interface(id,snapshot_id,normalization_run_id,native_id,name,kind) VALUES (%s,%s,%s,%s,%s,'unknown')", (interfaces[name], snapshot, run, name, name))
                 if kind == "mac":
@@ -124,8 +124,9 @@ def process_submission(connection_factory, submission_id):
                         cur.execute("INSERT INTO navis.routing_context(id,snapshot_id,normalization_run_id,native_id,name) VALUES (%s,%s,%s,%s,%s)", (contexts[vrf], snapshot, run, vrf, vrf))
                     if kind == "route":
                         route = uuid4()
-                        cur.execute("INSERT INTO navis.route(id,snapshot_id,normalization_run_id,routing_context_id,destination,route_type) VALUES (%s,%s,%s,%s,%s,'forward')", (route, snapshot, run, contexts[vrf], entry["destination"]))
-                        cur.execute("INSERT INTO navis.route_next_hop(id,snapshot_id,route_id,next_hop_address,interface_id) VALUES (%s,%s,%s,%s,%s)", (uuid4(), snapshot, route, entry["next_hop"], interfaces[name]))
+                        cur.execute("INSERT INTO navis.route(id,snapshot_id,normalization_run_id,routing_context_id,destination,route_type,details) VALUES (%s,%s,%s,%s,%s,%s,%s)", (route, snapshot, run, contexts[vrf], entry["destination"], entry.get("route_type", "forward"), Jsonb(entry.get("details", {}))))
+                        if entry["next_hop"] is not None or name is not None:
+                            cur.execute("INSERT INTO navis.route_next_hop(id,snapshot_id,route_id,next_hop_address,interface_id) VALUES (%s,%s,%s,%s,%s)", (uuid4(), snapshot, route, entry["next_hop"], interfaces.get(name)))
                     else:
                         cur.execute("INSERT INTO navis.neighbor_entry(id,snapshot_id,routing_context_id,interface_id,ip_address,mac_address,state,observed_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", (uuid4(), snapshot, contexts[vrf], interfaces[name], entry["ip"], entry["mac"], entry["state"], collected))
                 else:
@@ -141,15 +142,20 @@ def process_submission(connection_factory, submission_id):
                         if rulesets[key][1] != entry["processing_stage"]:
                             raise ValueError("conflicting NAT processing stages")
                         nat_id = uuid4()
-                        cur.execute("INSERT INTO navis.nat_rule(id,nat_rule_set_id,native_rule_id,position,enabled,details) VALUES (%s,%s,%s,%s,%s,%s)", (nat_id, rulesets[key][0], entry["rule_id"], entry["position"], entry["enabled"], Jsonb({"selectors_complete": False})))
+                        cur.execute("INSERT INTO navis.nat_rule(id,nat_rule_set_id,native_rule_id,position,enabled,details) VALUES (%s,%s,%s,%s,%s,%s)", (nat_id, rulesets[key][0], entry["rule_id"], entry["position"], entry["enabled"], Jsonb({**entry.get("details", {}), "selectors_complete": False})))
                         cur.execute("INSERT INTO navis.nat_translation(id,nat_rule_id,kind,specification) VALUES (%s,%s,%s,%s)", (uuid4(), nat_id, entry["translation_kind"], Jsonb(entry["translation"])))
                         _write_selectors(cur, snapshot, points[point], nat_id, entry["selectors"], False)
                         continue
+                    statefulness = entry.get("details", {}).get("statefulness", "unknown")
+                    if statefulness not in ("stateless", "stateful", "unknown"):
+                        raise ValueError("invalid policy statefulness")
                     if key not in rulesets:
-                        rulesets[key] = (uuid4(), entry["default_action"])
-                        cur.execute("INSERT INTO navis.policy_rule_set(id,enforcement_point_id,native_id,evaluation_order,default_action) VALUES (%s,%s,%s,'first_match',%s)", (rulesets[key][0], points[point], rule_set, entry["default_action"]))
+                        rulesets[key] = (uuid4(), entry["default_action"], statefulness)
+                        cur.execute("INSERT INTO navis.policy_rule_set(id,enforcement_point_id,native_id,evaluation_order,default_action,statefulness) VALUES (%s,%s,%s,'first_match',%s,%s)", (rulesets[key][0], points[point], rule_set, entry["default_action"], statefulness))
                     if rulesets[key][1] != entry["default_action"]:
                         raise ValueError("conflicting rule set defaults")
+                    if rulesets[key][2] != statefulness:
+                        raise ValueError("conflicting rule set statefulness")
                     policy_id = uuid4()
                     details = {**entry.get("details", {}), "selectors_complete": False}
                     cur.execute("INSERT INTO navis.policy_rule(id,rule_set_id,native_rule_id,position,action,enabled,details) VALUES (%s,%s,%s,%s,%s,%s,%s)", (policy_id, rulesets[key][0], entry["rule_id"], entry["position"], entry["action"], entry["enabled"], Jsonb(details)))

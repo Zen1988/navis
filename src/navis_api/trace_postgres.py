@@ -15,6 +15,8 @@ from navis_common.connection_state import evaluate_return
 from navis_common.findings import trace_findings
 from navis_common.reverse_path import ReverseTransition, apply_reverse_mapping, trace_reverse_path, assess_reverse_paths
 from navis_common.aci_trace_evidence import candidate_evidence
+from navis_common.policy_pipeline import ORIGINAL_ADDRESS_STAGE
+from navis_common.load_balancer import candidate_evidence as load_balancer_evidence
 
 
 class PostgresTraceProcessor:
@@ -49,12 +51,12 @@ class PostgresTraceProcessor:
                 if cur.fetchone():
                     raise PermissionError("dataset outside scope")
                 evidence_unchanged = manifest is not None and manifest == evidence_manifest(cur, dataset)
-                # Restrict ACI evidence to snapshots in this authorized build.
+                # Restrict vendor evidence to snapshots in this authorized build.
                 cur.execute("""SELECT r.snapshot_id::text, r.payload FROM navis.raw_payload r
                     JOIN navis.graph_build_snapshot bs ON bs.snapshot_id=r.snapshot_id
                     WHERE bs.graph_build_id=%s AND r.data_type='topology'
-                    AND r.payload->>'kind'='aci_fabric_evidence'""", (request.graph_build_id,))
-                aci_payloads = cur.fetchall()
+                    AND r.payload->>'kind' IN ('aci_fabric_evidence','avi_load_balancer_evidence','f5_load_balancer_evidence')""", (request.graph_build_id,))
+                vendor_payloads = cur.fetchall()
                 results = []
                 for flow in flows:
                     destination = self._endpoints(cur, dataset, request.graph_build_id, flow.destination)
@@ -82,9 +84,10 @@ class PostgresTraceProcessor:
                             WHERE bs.graph_build_id=%s AND s.device_id=%s AND pr.enabled ORDER BY pr.position""", (request.graph_build_id, current))
                         hop["policy_evidence"] = [{"enforcement_point": ep, "rule_id": rule, "action": action, "details": details} for ep, rule, action, details in cur.fetchall()]
                         policy_packet = packet
-                        hop["policy_evaluations"] = self._policies(cur, request.graph_build_id, current, policy_packet)
+                        hop["policy_evaluations"] = self._policies(cur, request.graph_build_id, current, policy_packet, application=flow.application)
                         hop["packet_before"] = asdict(packet)
-                        packet, nat_evidence = self._nat(cur, request.graph_build_id, current, packet)
+                        packet, nat_evidence = self._nat(cur, request.graph_build_id, current, packet,
+                                                        dataset=dataset, vrf=vrf, ingress=ingress)
                         hop["nat_evidence"] = nat_evidence
                         hop["packet_after"] = asdict(packet)
                         hops.append(hop)
@@ -130,13 +133,13 @@ class PostgresTraceProcessor:
                                 break
                             graph_route_id = resolution["chain"][-1]["route_id"]
                             hop["resolved_egress_interface"] = resolution["interface"]
-                        if selected[0]["route_type"] != "forward":
+                        if selected[0]["route_type"] not in ("forward", "connected"):
                             hop["stop_reason"] = "route behavior requires explicit evaluation"
                             break
                         hop["ingress_interface"] = ingress
                         egress = hop.get("resolved_egress_interface", selected[0]["interface"])
                         hop["egress_interface"] = egress
-                        hop["policy_evaluations"] = self._policies(cur, request.graph_build_id, current, policy_packet, ingress, egress)
+                        hop["policy_evaluations"] = self._policies(cur, request.graph_build_id, current, policy_packet, ingress, egress, application=flow.application)
                         for evaluation in hop["policy_evaluations"]:
                             if evaluation["decision"] == "deny":
                                 memberships = self._zone_memberships(cur, request.graph_build_id, current, evaluation["enforcement_point"])
@@ -224,7 +227,8 @@ class PostgresTraceProcessor:
                         "protocol": flow.protocol, "destination_port": flow.destination_port,
                         "status": verdict["status"], "verdict": verdict, "destination_candidates": destination,
                         "source_candidates": source, "route_candidates": routes, "hops": hops, "alternative_paths": alternative_paths, "coverage": coverage, "findings": trace_findings(hops, source, destination), "reasons": reasons,
-                        "aci_policy_evidence": candidate_evidence(aci_payloads, flow.source, flow.destination, flow.protocol, flow.destination_port)})
+                        "aci_policy_evidence": candidate_evidence(vendor_payloads, flow.source, flow.destination, flow.protocol, flow.destination_port),
+                        "load_balancer_evidence": load_balancer_evidence(vendor_payloads, flow.source, flow.destination, flow.protocol, flow.destination_port)})
                 response = {"graph_build_id": str(request.graph_build_id), "results": results}
         if include_reverse:
             from types import SimpleNamespace
@@ -348,7 +352,7 @@ class PostgresTraceProcessor:
             table_kind = (coverage[0][1] or {}).get("table_kind") if len(coverage) == 1 else None
             for route in routes:
                 route["next_states"] = []
-                if route["route_type"] != "forward":
+                if route["route_type"] not in ("forward", "connected"):
                     continue
                 edge_routes = [route]
                 if not route["interface"] and route["next_hop"]:
@@ -380,12 +384,21 @@ class PostgresTraceProcessor:
 
         def policy(state):
             packet = Packet(state.source, state.destination, state.protocol, state.destination_port, state.source_port)
-            routes, complete, table_kind = lookup(state)
-            selection = select_routes(state.destination, routes, complete=complete, table_kind=table_kind)
+            preview, nat_evidence = PostgresTraceProcessor._nat(cur, build_id, state.device_id, packet,
+                dataset=dataset, vrf=state.routing_context, ingress=state.ingress_interface)
+            original_stage = any(n.get("processing_stage") == ORIGINAL_ADDRESS_STAGE for n in nat_evidence)
+            route_state = state
+            if original_stage:
+                if any(n.get("status") == "unknown" for n in nat_evidence):
+                    return {"decision": "unknown", "reason": "pre-policy NAT/zone context unresolved", "nat": nat_evidence}
+                from dataclasses import replace
+                route_state = replace(state, destination=preview.destination)
+            routes, complete, table_kind = lookup(route_state)
+            selection = select_routes(route_state.destination, routes, complete=complete, table_kind=table_kind)
             selected = selection.get("routes", [])
             interfaces = {route["interface"] for route in selected}
             egress = next(iter(interfaces)) if len(interfaces) == 1 else None
-            decisions = PostgresTraceProcessor._policies(cur, build_id, state.device_id, packet, state.ingress_interface, egress)
+            decisions = PostgresTraceProcessor._policies(cur, build_id, state.device_id, packet, state.ingress_interface, egress, application=flow.application)
             if reverse_transitions is not None and any(item.get("statefulness") != "stateless" for item in decisions):
                 associated = {entry.policy_rule_set_id for entry in reverse_transitions if entry.device_id == state.device_id and entry.session_confirmed and entry.policy_rule_set_id}
                 for item in decisions:
@@ -420,7 +433,8 @@ class PostgresTraceProcessor:
 
         def nat(state):
             packet = Packet(state.source, state.destination, state.protocol, state.destination_port, state.source_port)
-            translated, evidence = PostgresTraceProcessor._nat(cur, build_id, state.device_id, packet)
+            translated, evidence = PostgresTraceProcessor._nat(cur, build_id, state.device_id, packet,
+                dataset=dataset, vrf=state.routing_context, ingress=state.ingress_interface)
             if not evidence:
                 cur.execute("""SELECT c.coverage FROM navis.snapshot_coverage c
                     JOIN navis.graph_build_snapshot bs ON bs.snapshot_id=c.snapshot_id
@@ -497,7 +511,7 @@ class PostgresTraceProcessor:
         return result
 
     @staticmethod
-    def _nat(cur, build_id, device_id, packet):
+    def _nat(cur, build_id, device_id, packet, *, dataset=None, vrf=None, ingress=None):
         cur.execute("""SELECT ns.id,ns.processing_stage,ep.native_id,s.id,
                 EXISTS (SELECT 1 FROM navis.snapshot_coverage c WHERE c.snapshot_id=s.id AND c.data_type='nat' AND c.coverage='complete')
             FROM navis.graph_build_snapshot bs JOIN navis.device_snapshot s ON s.id=bs.snapshot_id
@@ -509,43 +523,76 @@ class PostgresTraceProcessor:
         if len(sets) > 1:
             return packet, [{"status": "unknown", "reason": "NAT rule set ordering is not established"}]
         for rule_set, stage, enforcement, snapshot, complete in sets:
-            # Device-specific ordering relative to routing and policy is not yet modeled.
-            # Do not apply a translation unless the stage is explicitly supported.
-            if stage != "before_route_after_policy":
+            if stage not in ("before_route_after_policy", ORIGINAL_ADDRESS_STAGE):
                 evidence.append({"status": "unknown", "enforcement_point": enforcement,
                                  "reason": "unsupported NAT processing stage"})
                 continue
+            zone_context = {}
+            if stage == ORIGINAL_ADDRESS_STAGE:
+                def unknown_context(reason):
+                    return packet, [{"status": "unknown", "enforcement_point": enforcement,
+                                     "processing_stage": stage, "reason": reason}]
+                if dataset is None or vrf is None:
+                    return unknown_context("pre-NAT routing context unavailable")
+                routes = PostgresTraceProcessor._routes(cur, dataset, build_id, {"device_id": device_id, "vrf": vrf}, packet.destination)
+                cur.execute("""SELECT c.coverage,c.details FROM navis.graph_dataset_snapshot ds
+                    JOIN navis.graph_build_snapshot bs ON bs.snapshot_id=ds.snapshot_id AND bs.graph_build_id=%s
+                    JOIN navis.snapshot_coverage c ON c.snapshot_id=ds.snapshot_id AND c.data_type='route'
+                    WHERE ds.dataset_id=%s AND ds.device_id=%s AND c.data_type='route'""", (build_id, dataset, device_id))
+                coverage = cur.fetchall()
+                selection = select_routes(packet.destination, routes, complete=len(coverage) == 1 and coverage[0][0] == "complete",
+                    table_kind=(coverage[0][1] or {}).get("table_kind") if len(coverage) == 1 else None)
+                egresses = {r.get("interface") for r in selection.get("routes", []) if r.get("route_type") in ("forward", "connected")}
+                if selection["status"] != "selected" or len(egresses) != 1 or None in egresses or any(r.get("route_type") == "discard" for r in selection.get("routes", [])):
+                    return unknown_context("pre-NAT installed egress missing or ambiguous")
+                egress = next(iter(egresses))
+                memberships = PostgresTraceProcessor._zone_memberships(cur, build_id, device_id, enforcement)
+                zone_context = {"source_zone": resolve_zone(ingress, memberships).zone,
+                                "destination_zone": resolve_zone(egress, memberships).zone, "interface": egress}
             cur.execute("SELECT id,native_rule_id,enabled,details FROM navis.nat_rule WHERE nat_rule_set_id=%s ORDER BY position", (rule_set,))
             rules = []
             for rule_id, native_id, enabled, details in cur.fetchall():
                 cur.execute("SELECT kind,specification FROM navis.nat_translation WHERE nat_rule_id=%s ORDER BY id", (rule_id,))
                 translations = cur.fetchall()
                 cur.execute("""SELECT ns.role,ns.negated,ns.matches_any,ao.prefix::text,
-                    so.protocol,so.destination_port_start,so.destination_port_end
+                    so.protocol,so.destination_port_start,so.destination_port_end,
+                    so.source_port_start,so.source_port_end,so.details,
+                    ns.security_zone_id,ns.interface_id
                     FROM navis.nat_selector ns LEFT JOIN navis.address_object ao ON ao.id=ns.address_object_id
                     LEFT JOIN navis.service_object so ON so.id=ns.service_object_id WHERE ns.nat_rule_id=%s""", (rule_id,))
                 selectors = []
-                for role, negated, any_value, prefix, protocol, start, end in cur.fetchall():
+                for role, negated, any_value, prefix, protocol, start, end, source_start, source_end, service_details, zone, interface in cur.fetchall():
                     if any_value:
                         kind, value = "any", None
                     elif prefix:
                         kind, value = "address", prefix
                     elif protocol is not None and start is not None and end is not None:
                         kind, value = "service", {"protocol": protocol, "start": start, "end": end}
+                        if source_start is not None and source_end is not None:
+                            value.update(source_port_start=source_start, source_port_end=source_end)
+                        value.update({k: service_details[k] for k in ("tcp_flags_all", "tcp_flags_any") if k in (service_details or {})})
+                    elif zone is not None:
+                        cur.execute("SELECT name FROM navis.security_zone WHERE id=%s", (zone,))
+                        row = cur.fetchone()
+                        kind, value = "zone", row[0] if row else None
+                    elif interface is not None:
+                        cur.execute("SELECT native_id FROM navis.interface WHERE id=%s", (interface,))
+                        row = cur.fetchone()
+                        kind, value = "interface", row[0] if row else None
                     else:
                         kind, value = "unsupported", None
                     selectors.append({"role": role, "kind": kind, "value": value, "negated": negated})
                 kind, translation = translations[0] if len(translations) == 1 else ("unsupported", {})
                 rules.append({"rule_id": native_id, "enabled": enabled, "kind": kind, "translation": translation,
                               "selectors_complete": bool((details or {}).get("selectors_complete")), "selectors": selectors})
-            packet, result = evaluate_nat(rules, packet, complete=complete)
-            evidence.append({"enforcement_point": enforcement, "snapshot_id": str(snapshot), **result})
+            packet, result = evaluate_nat(rules, packet, complete=complete, **zone_context)
+            evidence.append({"enforcement_point": enforcement, "snapshot_id": str(snapshot), "processing_stage": stage, **result})
             if result["status"] == "unknown":
                 break
         return packet, evidence
 
     @staticmethod
-    def _policies(cur, build_id, device_id, flow, ingress=None, egress=None):
+    def _policies(cur, build_id, device_id, flow, ingress=None, egress=None, *, application=None):
         cur.execute("""SELECT rs.id,rs.default_action,ep.native_id,s.id,rs.statefulness,rs.session_semantics,
                 EXISTS (SELECT 1 FROM navis.snapshot_coverage c WHERE c.snapshot_id=s.id AND c.data_type='policy' AND c.coverage='complete')
             FROM navis.graph_build_snapshot bs JOIN navis.device_snapshot s ON s.id=bs.snapshot_id
@@ -560,17 +607,21 @@ class PostgresTraceProcessor:
             for rule_id, native_id, action, enabled, details in cur.fetchall():
                 cur.execute("""SELECT ps.role,ps.negated,ps.matches_any,ao.prefix::text,
                         so.protocol,so.destination_port_start,so.destination_port_end,
-                        ps.security_zone_id,ps.interface_id
+                        ps.security_zone_id,ps.interface_id,
+                        so.source_port_start,so.source_port_end,so.details
                     FROM navis.policy_selector ps LEFT JOIN navis.address_object ao ON ao.id=ps.address_object_id
                     LEFT JOIN navis.service_object so ON so.id=ps.service_object_id WHERE ps.policy_rule_id=%s""", (rule_id,))
                 selectors = []
-                for role, negated, any_value, prefix, protocol, start, end, zone, interface in cur.fetchall():
+                for role, negated, any_value, prefix, protocol, start, end, zone, interface, source_start, source_end, service_details in cur.fetchall():
                     if any_value:
                         kind, value = "any", None
                     elif prefix:
                         kind, value = "address", prefix
                     elif protocol is not None and start is not None and end is not None:
                         kind, value = "service", {"protocol": protocol, "start": start, "end": end}
+                        if source_start is not None and source_end is not None:
+                            value.update(source_port_start=source_start, source_port_end=source_end)
+                        value.update({k: service_details[k] for k in ("tcp_flags_all", "tcp_flags_any") if k in (service_details or {})})
                     elif zone is not None:
                         cur.execute("SELECT name FROM navis.security_zone WHERE id=%s", (zone,))
                         zone_row = cur.fetchone()
@@ -583,12 +634,25 @@ class PostgresTraceProcessor:
                         kind, value = "unsupported", None
                     selectors.append({"role": role, "kind": kind, "value": value, "negated": negated})
                 rules.append({"rule_id": native_id, "action": action, "enabled": enabled,
-                    "selectors_complete": bool((details or {}).get("selectors_complete")), "selectors": selectors})
+                    "selectors_complete": bool((details or {}).get("selectors_complete")), "selectors": selectors,
+                    "details": details or {}})
             memberships = PostgresTraceProcessor._zone_memberships(cur, build_id, device_id, enforcement)
             source_zone = resolve_zone(ingress, memberships)
             destination_zone = resolve_zone(egress, memberships)
+            workload_vifs = {r["details"]["workload_condition"]["vif_external_id"] for r in rules
+                             if r["details"].get("workload_condition")}
+            selected_vif, traffic_direction = None, None
+            if len(workload_vifs) == 1:
+                target_vif = next(iter(workload_vifs))
+                if ingress == target_vif and egress != target_vif:
+                    selected_vif, traffic_direction = target_vif, "IN"
+                elif egress == target_vif and ingress != target_vif:
+                    selected_vif, traffic_direction = target_vif, "OUT"
             result = evaluate_policy(rules, default, flow.source, flow.destination, flow.protocol, flow.destination_port,
-                                     complete=complete, source_zone=source_zone.zone, destination_zone=destination_zone.zone, interface=ingress)
+                                     complete=complete, source_zone=source_zone.zone, destination_zone=destination_zone.zone, interface=ingress,
+                                     source_port=getattr(flow, "source_port", None), application=application,
+                vif_external_id=selected_vif, traffic_direction=traffic_direction,
+                ingress_interface=ingress, egress_interface=egress)
             result["source_zone"] = source_zone.zone
             result["destination_zone"] = destination_zone.zone
             # Session applicability must be explicitly normalized per protocol;

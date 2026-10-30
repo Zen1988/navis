@@ -1,0 +1,13 @@
+---
+- name: Validate segment path and export identifier
+  ansible.builtin.assert:
+    that:
+      - nsx_segment.id is match('^[A-Za-z0-9_-]+$')
+      - nsx_segment.path == '/infra/segments/' ~ nsx_segment.id
+
+- name: Collect segment ports and native attachment IDs
+  ansible.builtin.include_tasks: resource.yml
+  vars:
+    nsx_resource:
+      name: "segment-{{ nsx_segment.id }}-ports"
+      path: "/policy/api/v1{{ nsx_segment.path }}/ports"

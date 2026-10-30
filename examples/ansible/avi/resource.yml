@@ -1,0 +1,10 @@
+---
+- name: Initialize Avi resource pagination
+  ansible.builtin.set_fact:
+    avi_page_number: 0
+    avi_page_url: "{{ avi_controller_url | regex_replace('/+$', '') }}/api/{{ avi_resource }}?page_size={{ avi_page_size | int }}"
+    avi_seen_urls: []
+  no_log: true
+
+- name: Read first and subsequent Avi pages
+  ansible.builtin.include_tasks: page.yml

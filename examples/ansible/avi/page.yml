@@ -1,0 +1,65 @@
+---
+- name: Validate next URL before sending credentials
+  ansible.builtin.assert:
+    that:
+      - avi_page_url | urlsplit('scheme') == 'https'
+      - avi_page_url | urlsplit('netloc') == avi_controller_url | urlsplit('netloc')
+      - avi_page_url | urlsplit('path') | regex_replace('/+$', '') == '/api/' ~ avi_resource
+      - avi_page_url not in avi_seen_urls
+  no_log: true
+
+- name: Read Avi resource page
+  ansible.builtin.uri:
+    url: "{{ avi_page_url }}"
+    method: GET
+    url_username: "{{ avi_username }}"
+    url_password: "{{ avi_password }}"
+    force_basic_auth: true
+    headers:
+      X-Avi-Version: "{{ avi_api_version }}"
+      X-Avi-Tenant-UUID: "{{ avi_tenant_uuid }}"
+    validate_certs: true
+    follow_redirects: none
+    return_content: true
+    status_code: 200
+  register: avi_response
+  no_log: true
+
+- name: Verify native list response
+  ansible.builtin.assert:
+    that:
+      - avi_response.json.results is defined
+      - avi_response.json.results is sequence
+      - avi_response.json.count is defined
+  no_log: true
+
+- name: Save native response page
+  ansible.builtin.copy:
+    dest: "{{ avi_output_dir }}/{{ avi_resource }}-{{ avi_page_number }}.json"
+    mode: '0600'
+    content: "{{ avi_response.json | to_nice_json }}"
+  no_log: true
+
+- name: Advance Avi cursor
+  ansible.builtin.set_fact:
+    avi_seen_urls: "{{ avi_seen_urls + [avi_page_url] }}"
+    avi_page_number: "{{ (avi_page_number | int) + 1 }}"
+    avi_next: "{{ avi_response.json.next | default('', true) }}"
+  no_log: true
+
+- name: Enforce page budget
+  ansible.builtin.assert:
+    that:
+      - not avi_next or (avi_page_number | int) < (avi_max_pages | int)
+    fail_msg: 'Avi collection reached its page budget.'
+  no_log: true
+
+- name: Resolve relative next URL
+  ansible.builtin.set_fact:
+    avi_page_url: "{{ (avi_controller_url | regex_replace('/+$', '') ~ avi_next) if avi_next.startswith('/') else avi_next }}"
+  when: avi_next | length > 0
+  no_log: true
+
+- name: Read next Avi page
+  ansible.builtin.include_tasks: page.yml
+  when: avi_next | length > 0

@@ -27,3 +27,12 @@ class AciTraceEvidenceTests(unittest.TestCase):
         self.assertEqual(candidate_evidence([("s", self.payload)], "192.0.2.5", "198.51.100.3", "tcp", 443)["candidates"], [])
         self.payload["semantics"]["endpoint_groups"] = None
         self.assertEqual(candidate_evidence([("s", self.payload)], "192.0.2.5", "198.51.100.3", "tcp", 443)["candidates"], [])
+
+    def test_translated_direction_is_used_instead_of_assuming_both_directions(self):
+        semantics = self.payload["semantics"]
+        semantics["directional_rules"] = [{**semantics["policy_candidates"][0],
+            "packet_direction": "consumer_to_provider", "destination_ports": {"start": 443, "end": 443}}]
+        forward = candidate_evidence([("s", self.payload)], "192.0.2.5", "198.51.100.3", "tcp", 443)
+        self.assertEqual(forward["candidates"][0]["packet_direction"], "consumer_to_provider")
+        self.assertEqual(candidate_evidence([("s", self.payload)], "198.51.100.3", "192.0.2.5", "tcp", 443)["candidates"], [])
+        self.assertEqual(candidate_evidence([("s", self.payload)], "192.0.2.5", "198.51.100.3", "tcp", 22)["candidates"], [])

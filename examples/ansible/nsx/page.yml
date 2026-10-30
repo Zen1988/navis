@@ -17,6 +17,7 @@
     that:
       - nsx_response.json.results is defined
       - nsx_response.json.results is sequence
+      - not (nsx_response.json.cursor | default('')) or nsx_response.json.cursor not in nsx_seen_cursors
     fail_msg: 'Unexpected NSX response; collection is incomplete.'
   no_log: true
 
@@ -31,6 +32,8 @@
   ansible.builtin.set_fact:
     nsx_cursor: "{{ nsx_response.json.cursor | default('') }}"
     nsx_page_number: "{{ (nsx_page_number | int) + 1 }}"
+    nsx_resource_results: "{{ nsx_resource_results + nsx_response.json.results }}"
+    nsx_seen_cursors: "{{ nsx_seen_cursors + ([nsx_response.json.cursor] if nsx_response.json.cursor | default('') else []) }}"
   no_log: true
 
 - name: Stop on page limit

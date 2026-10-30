@@ -6,11 +6,15 @@
   vars:
     nsx_output_dir: ./nsx-output
     nsx_max_pages: 100
+    nsx_collected_resources: {}
     nsx_resources:
       - {name: domains, path: '/policy/api/v1/infra/domains'}
       - {name: groups, path: '/policy/api/v1/infra/domains/{{ nsx_domain | urlencode }}/groups'}
       - {name: security-policies, path: '/policy/api/v1/infra/domains/{{ nsx_domain | urlencode }}/security-policies'}
       - {name: services, path: '/policy/api/v1/infra/services'}
+      - {name: virtual-machines, path: '/api/v1/fabric/virtual-machines'}
+      - {name: vifs, path: '/api/v1/fabric/vifs'}
+      - {name: segments, path: '/policy/api/v1/infra/segments'}
   tasks:
     - name: Validate configuration
       ansible.builtin.assert:
@@ -20,6 +24,8 @@
           - nsx_username is defined
           - nsx_password is defined
           - nsx_domain is defined
+          - nsx_domain is match('^[A-Za-z0-9_-]+$')
+          - nsx_manager_id is defined
           - nsx_max_pages | int > 0
         quiet: true
       no_log: true
@@ -36,8 +42,26 @@
       loop_control:
         loop_var: nsx_resource
 
+    - name: Collect each policy rulebase
+      ansible.builtin.include_tasks: policy.yml
+      loop: "{{ nsx_collected_resources['security-policies'] }}"
+      loop_control:
+        loop_var: nsx_policy
+
+    - name: Collect resolved workload group membership
+      ansible.builtin.include_tasks: group.yml
+      loop: "{{ nsx_collected_resources['groups'] }}"
+      loop_control:
+        loop_var: nsx_group
+
+    - name: Collect segment port attachments
+      ansible.builtin.include_tasks: segment.yml
+      loop: "{{ nsx_collected_resources['segments'] }}"
+      loop_control:
+        loop_var: nsx_segment
+
     - name: Write metadata
       ansible.builtin.copy:
         dest: "{{ nsx_output_dir }}/metadata.json"
         mode: '0600'
-        content: "{{ {'domain': nsx_domain, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'reason': 'selected policy resources only; effective rules, membership, topology and routes require further collection'} | to_nice_json }}"
+        content: "{{ {'manager_id': nsx_manager_id, 'manager_type': 'local', 'domain': nsx_domain, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'reason': 'policy and observed VM/vNIC membership only; realized DFW, host preparation, exclusions, capacity and forwarding not verified'} | to_nice_json }}"

@@ -1,0 +1,41 @@
+---
+- name: Validate package UID used as a filename
+  ansible.builtin.assert:
+    that:
+      - checkpoint_package is match('^[A-Za-z0-9_-]+$')
+
+- name: Read full package including ordered access layers and installation targets
+  ansible.builtin.uri:
+    url: "{{ checkpoint_api_url | regex_replace('/+$', '') }}/show-package"
+    method: POST
+    headers:
+      X-chkp-sid: "{{ checkpoint_session }}"
+    body_format: json
+    body: {uid: "{{ checkpoint_package }}", details-level: full}
+    validate_certs: true
+    status_code: 200
+    return_content: true
+  register: checkpoint_package_response
+  no_log: true
+
+- name: Verify package UID
+  ansible.builtin.assert:
+    that:
+      - checkpoint_package_response.json.uid == checkpoint_package
+  no_log: true
+
+- name: Save full package
+  ansible.builtin.copy:
+    dest: "{{ checkpoint_output_dir }}/package-{{ checkpoint_package }}.json"
+    mode: '0600'
+    content: "{{ checkpoint_package_response.json | to_nice_json }}"
+  no_log: true
+
+- name: Collect native NAT rulebase with object dictionary
+  ansible.builtin.include_tasks: query_pages.yml
+  vars:
+    checkpoint_command: show-nat-rulebase
+    checkpoint_filename: "nat-{{ checkpoint_package }}"
+    checkpoint_parameters:
+      package: "{{ checkpoint_package }}"
+      use-object-dictionary: true

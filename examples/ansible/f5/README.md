@@ -1,13 +1,16 @@
-# F5 BIG-IP collection example
+# F5 BIG-IP iControl REST collection
 
-A BIG-IP can participate in dynamic routing, including BGP route advertisement for virtual addresses. Its management address is used to collect evidence, but management routes are separate from traffic-plane routes. Collect each relevant BIG-IP/HA peer because active state and runtime routes can differ. BIG-IQ may manage devices centrally, but this example connects to each BIG-IP management endpoint directly.
+The Python collector in this directory uses management-plane HTTPS GET requests only. Supply an externally provisioned token for an account restricted to the necessary read permissions in `F5_AUTH_TOKEN`, using your protected credential mechanism. It does not create a login session, change configuration or use a shell endpoint. Tokens are neither CLI arguments nor export fields. TLS verification is mandatory; use `--ca-file` for a private CA.
 
-Install `f5networks.f5_modules` and run `ansible-playbook -i localhost, collect.yml -e @protected-vars.yml`. Supply `f5_host`, `f5_user`, `f5_password` in Vault/AWX; configure trusted TLS. Optionally set `f5_partition` and `f5_output_dir`. Credentials remain with the collector. Outputs are sensitive and stored locally, and should be reviewed before sharing.
+Set `PYTHONPATH=src`, use a protected output directory and a fresh export filename:
 
-The playbook gathers interface, VLAN, self-IP, route-domain, virtual server and pool facts, plus selected static route, advertisement configuration, firewall, address/port list and packet-filter configuration with F5's command module. Command failures are recorded individually, including unavailable modules or insufficient permissions. Output is raw evidence, not yet normalized or submitted to Navis.
+```text
+python examples/ansible/f5/collect.py --url https://bigip-management.example --device-id bigip-site-a --output protected/f5-export.json --ca-file trusted-ca.pem
+python examples/ansible/f5/normalize.py protected/f5-export.json --partition Common --route-domain 0 --namespace f5-site --external-device-id bigip-common-rd0 > protected/f5-submissions.json
+```
 
-AFM policies can apply at global, route-domain, self-IP or virtual-server contexts; staged rules are not enforced. Self-IP port lockdown concerns traffic to the BIG-IP, not automatically forwarded application traffic. The example does not establish effective policy, collect the operational routing table or BGP advertisements, resolve all objects, evaluate virtual server/pool translation, iRules, HA state, or cover every partition. Therefore route and policy coverage remains partial, even when collection succeeds. Check version, licenses, permissions, partitions, command output and live routes before using results in analysis.
+Endpoints: `/mgmt/tm/ltm/virtual`, `/ltm/pool`, each pool's `/members`, `/ltm/snatpool`, `/net/route`, `/net/self`, `/net/route-domain` and `/auth/partition` (all under `/mgmt/tm`). Pool endpoints are constructed from validated full paths rather than following arbitrary object links. Pagination is bounded, checks native identities/counts when supplied, rejects redirects and foreign resource paths, and rewrites BIG-IP `https://localhost` pagination links to the explicitly configured management origin. Requests use timeouts and bounded response sizes. Missing permissions or collection errors fail the export. Exports contain sensitive configuration; OS ACLs and secret retention remain the operator's responsibility.
 
-Salt has a [BIG-IP module](https://docs.saltproject.io/en/3006/ref/modules/all/salt.modules.bigip.html), but its documented list functions do not provide the complete routing and firewall evidence required here. No custom Salt HTTP collector is included.
+The normalization result is an array of four partial ingestion envelopes. Map the source identity to the intended partition/route-domain device context, approve the normalized adapter digest and submit each envelope separately through the normal authenticated API. No device credentials go to Navis. No live Ansible workflow is provided; the Python commands can be run by your existing collection automation.
 
-References: [F5 device info module](https://clouddocs.f5.com/products/orchestration/ansible/devel/modules/bigip_device_info_module.html), [F5 routing and advertisement example](https://clouddocs.f5.com/training/community/adc/html/class5/module1/lab1.html), [F5 firewall policies](https://clouddocs.f5.com/api/icontrol-soap/Security__FirewallPolicy.html).
+See [supported semantics and remaining work](../../../docs/F5.md). Configuration alone does not establish member health, active HA ownership, installed forwarding, actual source translation or end-to-end connectivity.

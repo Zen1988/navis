@@ -8,6 +8,11 @@
     navis_ios_output_dir: ./ios-output
     # Commands vary by release, feature and privilege; retain unsupported results.
     navis_ios_commands:
+      - show running-config | section ^interface
+      - show running-config | section ^ip access-list|^ipv6 access-list|^access-list
+      - show running-config | include ^ip route|^ipv6 route
+      - show running-config | include ^ip nat
+      - show running-config | section ^vrf definition|^ip vrf
       - show version
       - show interfaces
       - show ip interface
@@ -50,11 +55,22 @@
       ignore_errors: true
       no_log: true
 
+    - name: Initialize command export
+      ansible.builtin.set_fact:
+        ios_export_results: []
+      no_log: true
+
+    - name: Build export without Ansible invocation data
+      ansible.builtin.set_fact:
+        ios_export_results: "{{ (ios_export_results | default([])) + [{'command': item.item, 'failed': item.failed | default(false), 'stdout': (item.stdout | default([]) | map('regex_replace', '(?im)^.*(password|secret|community|key-string|pre-shared-key|authentication-key).*$', ' ! navis-redacted-sensitive-line') | list)}] }}"
+      loop: "{{ ios_collection.results }}"
+      no_log: true
+
     - name: Save command results on the controller
       ansible.builtin.copy:
         dest: "{{ navis_ios_output_dir }}/{{ inventory_hostname }}.json"
         mode: '0600'
-        content: "{{ {'device_id': inventory_hostname, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'results': ios_collection.results} | to_nice_json }}"
+        content: "{{ {'device_id': inventory_hostname, 'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'), 'coverage': 'partial', 'results': ios_export_results} | to_nice_json }}"
       delegate_to: localhost
       no_log: true
 
