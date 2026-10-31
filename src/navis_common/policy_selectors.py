@@ -39,9 +39,8 @@ def evaluate_rule(selectors, source, destination, protocol, destination_port, *,
             matched = not matched
         roles.setdefault(role, []).append((matched, bool(selector.get("negated"))))
     # Repeated selectors of the same role are alternatives; different roles intersect.
-    if not {"source", "destination", "service"} <= roles.keys():
-        return None
-    unknown = False
+    # A missing role is unknown, but a definite mismatch elsewhere still excludes the rule.
+    unknown = not {"source", "destination", "service"} <= roles.keys()
     for entries in roles.values():
         positives = [match for match, negated in entries if not negated]
         negatives = [match for match, negated in entries if negated]

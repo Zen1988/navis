@@ -1,6 +1,6 @@
 # Collector examples
 
-For current implementations and adapter gaps, see [project status](../../docs/STATUS.md). ACI, Palo Alto, Check Point, NSX DFW, [IOS/IOS XE](cisco_ios/README.md), [Avi](avi/README.md) and [F5 BIG-IP](f5/README.md) include partial collector-side adapters; the general examples below are not a complete inventory of implemented collectors. The F5 collector is Python using management iControl REST.
+For current implementations and adapter gaps, see [project status](../../docs/STATUS.md). ACI, Palo Alto, Check Point, NSX DFW, [IOS/IOS XE](cisco_ios/README.md), [Avi](avi/README.md), [F5 BIG-IP](f5/README.md) and [FortiGate](fortigate/README.md) include partial collector-side adapters; the general examples below are not a complete inventory of implemented collectors. The F5 and FortiGate collectors are Python using management REST APIs.
 
 These are partial, read-only examples, not production collectors or complete network discovery. Run on an Ansible controller with network access and credentials managed in AWX/Ansible Vault or another external secret store. Navis does not receive device credentials. Verify endpoints, version compatibility, permissions, pagination, certificates and response redaction for your platform. Some outputs may contain sensitive configuration.
 
