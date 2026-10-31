@@ -1,5 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /app
+ENV PYTHONPATH=/app/src
 COPY pyproject.toml ./
 COPY src ./src
 COPY web ./web
