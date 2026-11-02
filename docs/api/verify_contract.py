@@ -131,7 +131,7 @@ def main():
         else:
             assert len(TraceRequest.model_validate(value).flows()) == 2
     schema = app.openapi()
-    assert len(schema['paths']) == 7
+    assert len(schema['paths']) == 8
     trace_result = unresolved_trace(values['trace.json'])
     responses = {
         'ingestion-accepted.json': dict(ingestion_id=RECEIPT,status='pending_identity'),
@@ -146,7 +146,7 @@ def main():
         else:
             assert json.loads(path.read_text(encoding='utf-8')) == value, 'stale artifact: ' + str(path)
     http_boundary_checks(values['ingestion-interface.json'],values['trace.json'],trace_result)
-    print('Validated 8 requests, 3 response fixtures, 7 API paths, OpenAPI and mocked HTTP/trace checks.')
+    print('Validated 8 requests, 3 response fixtures, 8 API paths, OpenAPI and mocked HTTP/trace checks.')
 
 
 if __name__ == '__main__':

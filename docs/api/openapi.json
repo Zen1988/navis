@@ -5,6 +5,48 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/nauth/token": {
+      "post": {
+        "summary": "Issue a client credentials access token",
+        "description": "Authenticate with HTTP Basic client_id:client_secret. Requires HTTPS and locally provisioned clients.",
+        "operationId": "issue_token_nauth_token_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "grant_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_credentials"
+                    ]
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "Space-separated subset of approved scopes"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "grant_type"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "summary": "Liveness",

@@ -1,8 +1,12 @@
 # Local container and Kubernetes test setup
 
-This setup is for an isolated test environment. The local token is a static bearer credential, not OAuth, does not rotate automatically, and has no per-token expiry or revocation. Use TLS or mTLS at a trusted ingress, restrict database access, and use external identity for production. Device credentials stay outside Navis. Never commit credentials or put them in shell history.
+For the built-in NAuth issuer, local client provisioning and a shared
+multi-pod instance identity, see [security setup](../docs/SECURITY.md).
+The static-token instructions and manifest below remain an isolated legacy test configuration.
 
-1. Install PostgreSQL and apply all SQL files in `migrations/` in numeric order with `psql -v ON_ERROR_STOP=1 -f <file>` (currently 001 through 016). Apply each migration once; there is not yet a migration tracking service. Use an AGE-compatible PostgreSQL with Apache AGE installed for graph work; enable the AGE extension separately with an appropriately privileged administrator. The API can stage data without AGE. The user has run migrations and selected AGE tests in an isolated environment; upgrades and broader integration remain unverified.
+This setup is for an isolated test environment. The local token is a static bearer credential, not NAuth, does not rotate automatically, and has no per-token expiry or revocation. Use TLS or mTLS at a trusted ingress, restrict database access, and use external identity for production. Device credentials stay outside Navis. Never commit credentials or put them in shell history.
+
+1. Install PostgreSQL and apply all SQL files in `migrations/` in numeric order with `psql -v ON_ERROR_STOP=1 -f <file>` (currently 001 through 017). Apply each migration once; there is not yet a migration tracking service. Use an AGE-compatible PostgreSQL with Apache AGE installed for graph work; enable the AGE extension separately with an appropriately privileged administrator. The API can stage data without AGE. The user has run migrations and selected AGE tests in an isolated environment; upgrades and broader integration remain unverified.
 2. Provision a test source and consumer using UUIDs you choose. These statements are examples; apply them to your test database and replace the UUIDs:
 
 ```sql

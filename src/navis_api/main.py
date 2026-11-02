@@ -6,10 +6,12 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 import os
 from functools import partial
+from uuid import uuid4
 
 from navis_common.auth import DenyAllVerifier, Principal
 from .ingestion import Ingestion, UnavailableProcessor
 from .trace import TraceRequest, UnavailableTraceProcessor
+from .nauth import issue_token
 
 app = FastAPI(title="Navis API", version="0.1.0")
 app.state.token_verifier = DenyAllVerifier()
@@ -17,14 +19,23 @@ app.state.ingestion_processor = UnavailableProcessor()
 app.state.graph_reader = None
 app.state.trace_processor = UnavailableTraceProcessor()
 app.state.trace_sessions = None
+app.state.registration = None
+app.state.runtime_id = str(uuid4())
 bearer = HTTPBearer(auto_error=False)
 
 
 @app.on_event("startup")
 def configure_test_services():
-    """Opt-in local test configuration; absence leaves the service fail-closed."""
+    """Configure local testing or the built-in NAuth issuer, failing closed."""
+    app.state.runtime_id = str(uuid4())
     dsn = os.environ.get("NAVIS_DATABASE_URL")
     token = os.environ.get("NAVIS_LOCAL_TOKEN")
+    mode = os.environ.get("NAVIS_AUTH_MODE", "local")
+    if mode not in {"local", "nauth"}:
+        raise RuntimeError("NAVIS_AUTH_MODE must be local or nauth")
+    registered = mode == "nauth"
+    if registered and (not dsn or token):
+        raise RuntimeError("NAuth authentication requires a database and forbids NAVIS_LOCAL_TOKEN")
     if dsn:
         import psycopg
         from .ingestion import PostgresIngestionProcessor
@@ -36,12 +47,32 @@ def configure_test_services():
         app.state.trace_processor = PostgresTraceProcessor(factory)
         app.state.trace_sessions = PostgresTraceSessions(factory)
         app.state.graph_reader = partial(get_graph, factory)
+        if registered:
+            from .registration import Registration
+            service = Registration(factory)
+            with factory() as conn, conn.cursor() as cur:
+                cur.execute("SELECT id FROM navis.instance_identity WHERE singleton")
+                identity = cur.fetchone()
+                if identity is None:
+                    raise RuntimeError("Run local registration init before starting API pods")
+            app.state.instance_id = str(identity[0])
+            app.state.registration = service
+            app.state.token_verifier = service
     if token:
         from navis_common.local_auth import LocalTokenVerifier
         scopes = frozenset(os.environ.get("NAVIS_LOCAL_SCOPES", "").split())
         app.state.token_verifier = LocalTokenVerifier(token, Principal(
             subject=os.environ.get("NAVIS_LOCAL_SUBJECT", "local-test"),
             issuer=os.environ.get("NAVIS_LOCAL_ISSUER", "navis-local"), scopes=scopes))
+
+
+app.post("/nauth/token", summary="Issue a client credentials access token",
+         description="Authenticate with HTTP Basic client_id:client_secret. Requires HTTPS and locally provisioned clients.",
+         openapi_extra={"requestBody": {"required": True, "content": {
+             "application/x-www-form-urlencoded": {"schema": {"type": "object",
+                 "required": ["grant_type"], "properties": {
+                     "grant_type": {"type": "string", "enum": ["client_credentials"]},
+                     "scope": {"type": "string", "description": "Space-separated subset of approved scopes"}}}}}}})(issue_token)
 
 
 @app.get("/", include_in_schema=False)

@@ -1,5 +1,12 @@
 # Navis API documentation
 
+Start with [NAuth integration onboarding](ONBOARDING_API.md) for the steps an
+operator and caller must complete before making authenticated API requests.
+
+Navis also provides a built-in NAuth client-credentials issuer, with local
+client provisioning, shared instance identity and five-minute access tokens.
+See [NAuth: Navis Authentication](SECURITY.md); no external identity provider is required.
+
 The current consumer reference is the [API integration guide](INTEGRATION_API.md). It covers every implemented endpoint, authorization, ingestion and normalization contracts, graph/trace responses, recommendations, error handling, retries and client examples.
 
 Companion artifacts:
