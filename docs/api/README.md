@@ -16,3 +16,5 @@ python docs/api/verify_contract.py
 ```
 
 Use `--write` only when intentionally refreshing generated artifacts. The script validates the request models and all seven typed payload kinds, compares artifacts, and exercises real HTTP handlers with fake storage. It makes no external API or live database calls. HTTP client/ASGI libraries may use a local Windows socketpair. The HTTP client is a documentation-check dependency, not a new production requirement. Changes in installed FastAPI/Pydantic versions can affect generated schema; compare the deployed `/openapi.json` and pin your deployment dependencies.
+
+Ingestion `source.object_class` defaults to `device` in these fixtures. For CMDB identities, send it explicitly (for example `NetworkNode`) alongside `namespace` and `external_device_id`; preserve ID leading zeros. See the [identity contract](../INTEGRATION_API.md#external-device-identity-and-registered-clients).

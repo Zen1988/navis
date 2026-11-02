@@ -9,3 +9,5 @@ salt 'collector-minion' navis_nsx.snapshot /secure/nsx-output profile=YOUR_PROFI
 ```
 
 Use a fresh, trusted output directory. This example only supports the default domain because the extension group listing does not expose a domain parameter. It refuses responses containing a pagination cursor because these extension functions do not expose cursor continuation. Coverage is partial: effective group membership, topology, routing, NAT and Navis normalization/submission are not included. Raw output may be sensitive. This example has not been tested against a live Salt or NSX installation.
+
+External device mappings use namespace, object class and opaque ID. Existing emitted envelopes default to class `device`; for another class set `source.object_class` before submission and provision the matching mapping. See the [identity contract](../../../docs/INTEGRATION_API.md#external-device-identity-and-registered-clients).

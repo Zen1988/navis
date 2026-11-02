@@ -9,11 +9,11 @@ def get_graph(connection_factory, build_id, principal):
     build_id = UUID(str(build_id))
     with connection_factory() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT c.id,c.identity_source_system_id FROM navis.api_consumer c WHERE c.issuer=%s AND c.subject_or_client_id=%s AND c.status='active'", (principal.issuer, principal.subject))
+            cur.execute("SELECT c.id,c.identity_source_system_id,c.identity_object_class FROM navis.api_consumer c WHERE c.issuer=%s AND c.subject_or_client_id=%s AND c.status='active'", (principal.issuer, principal.subject))
             consumer = cur.fetchone()
             if consumer is None:
                 raise PermissionError("consumer not authorized")
-            consumer_id, identity_source = consumer
+            consumer_id, identity_source, object_class = consumer
             cur.execute("SELECT b.dataset_id,b.status FROM navis.graph_build b WHERE b.id=%s", (build_id,))
             build = cur.fetchone()
             if build is None:
@@ -39,14 +39,14 @@ def get_graph(connection_factory, build_id, principal):
                 # Require a mapping valid for every selected snapshot of this device.
                 cur.execute("""SELECT m.external_id, src.namespace FROM navis.device_identity_mapping m
                     JOIN navis.source_system src ON src.id=m.source_system_id
-                    WHERE m.device_id=%s AND m.source_system_id=%s AND NOT EXISTS (
+                    WHERE m.device_id=%s AND m.source_system_id=%s AND m.object_class=%s AND NOT EXISTS (
                       SELECT 1 FROM navis.graph_build_snapshot bs JOIN navis.device_snapshot s ON s.id=bs.snapshot_id
                       WHERE bs.graph_build_id=%s AND s.device_id=%s
-                      AND NOT (m.valid_from <= s.collected_at AND (m.valid_until IS NULL OR m.valid_until > s.collected_at)))""", (device, identity_source, build_id, device))
+                      AND NOT (m.valid_from <= s.collected_at AND (m.valid_until IS NULL OR m.valid_until > s.collected_at)))""", (device, identity_source, object_class, build_id, device))
                 mappings = cur.fetchall()
                 identity = {"status": "missing"}
                 if len(mappings) == 1:
-                    identity = {"status": "mapped", "namespace": mappings[0][1], "id": mappings[0][0]}
+                    identity = {"status": "mapped", "namespace": mappings[0][1], "object_class": object_class, "id": mappings[0][0]}
                 elif len(mappings) > 1:
                     identity = {"status": "ambiguous"}
                 nodes.append({"id": str(device), "type": "device", "external_identity": identity})

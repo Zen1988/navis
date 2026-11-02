@@ -636,3 +636,5 @@ Navis is currently focused on defining the foundational architecture, data model
 *Latin: ship, navigation, voyage.*
 
 Because every packet has a path.
+
+External device identities include source namespace, object class and opaque ID (for example `CMDB:NetworkNode:000012313213`). See the [integration identity contract](docs/INTEGRATION_API.md#external-device-identity-and-registered-clients) for request fields, registered-client configuration and migration 016.

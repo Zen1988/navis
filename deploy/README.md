@@ -2,7 +2,7 @@
 
 This setup is for an isolated test environment. The local token is a static bearer credential, not OAuth, does not rotate automatically, and has no per-token expiry or revocation. Use TLS or mTLS at a trusted ingress, restrict database access, and use external identity for production. Device credentials stay outside Navis. Never commit credentials or put them in shell history.
 
-1. Install PostgreSQL and apply all SQL files in `migrations/` in numeric order with `psql -v ON_ERROR_STOP=1 -f <file>` (currently 001 through 015). Apply each migration once; there is not yet a migration tracking service. Use an AGE-compatible PostgreSQL with Apache AGE installed for graph work; enable the AGE extension separately with an appropriately privileged administrator. The API can stage data without AGE. The user has run migrations and selected AGE tests in an isolated environment; upgrades and broader integration remain unverified.
+1. Install PostgreSQL and apply all SQL files in `migrations/` in numeric order with `psql -v ON_ERROR_STOP=1 -f <file>` (currently 001 through 016). Apply each migration once; there is not yet a migration tracking service. Use an AGE-compatible PostgreSQL with Apache AGE installed for graph work; enable the AGE extension separately with an appropriately privileged administrator. The API can stage data without AGE. The user has run migrations and selected AGE tests in an isolated environment; upgrades and broader integration remain unverified.
 2. Provision a test source and consumer using UUIDs you choose. These statements are examples; apply them to your test database and replace the UUIDs:
 
 ```sql
@@ -19,3 +19,5 @@ VALUES ('00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-0000000
 5. To stage example data, use `examples/ansible/submit_normalized.yml` or the JSON fixtures. A successful response is `pending_identity`. Worker invocation, device mappings, approved adapter digest, dataset selection and graph building are separate manual steps. The web console and API do not yet deliver complete traces or firewall recommendations.
 
 The `navis:local` image is a build target; it is not published by this repository. Readiness checks only test authentication configuration and database schema connectivity. They do not certify that ingestion processing, graph building or analysis are complete.
+
+Migration 016 requires `btree_gist` and rejects overlapping historical external identity mappings. Resolve those explicitly before upgrading. Configure caller `identity_object_class` when moving legacy `device` identities to a CMDB class; see [identity migration guidance](../docs/INTEGRATION_API.md#external-device-identity-and-registered-clients).

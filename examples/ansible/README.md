@@ -25,3 +25,5 @@ ansible-playbook -i localhost, rest_discovery.yml -e @protected-vars.yml
 Required variables: `collector_url`, `collector_token`. The token is not printed. The example reports only HTTP status, not the collected payload; a real adapter must sanitize and map the response before sending it to Navis.
 
 `submit_normalized.yml` shows the actual Navis POST with a partial interface fixture. Provide `navis_url`, `navis_token`, `navis_source_namespace`, `navis_external_device_id`, and a timezone-aware ISO timestamp as `navis_collected_at`. See [CONTRACT.md](CONTRACT.md) for the response and current normalization gaps.
+
+Current example CLIs use the default external object class `device`. For a CMDB class such as `NetworkNode`, set `source.object_class` on each generated ingestion envelope before submission; see the [collector identity contract](CONTRACT.md).

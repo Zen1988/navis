@@ -10,3 +10,5 @@ Companion artifacts:
 - [Implementation status and remaining work](STATUS.md)
 
 The guide supersedes the earlier API foundation notes. Ingestion acceptance is staging, normalization/build preparation remains a separate operational step, and candidate evidence must not be treated as confirmed end-to-end connectivity. See the guide for exact implemented behavior and deployment prerequisites.
+
+External device identities use source namespace, object class and opaque ID. Registered consumer identity and source authorization are separate. See the [external identity contract](INTEGRATION_API.md#external-device-identity-and-registered-clients) for CMDB examples, caller configuration and migration 016.

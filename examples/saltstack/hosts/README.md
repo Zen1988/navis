@@ -18,3 +18,5 @@ If firewalld or a Windows Firewall profile is disabled, report that observation,
 Output is native, not a Navis ingestion envelope. Normalization, device identity mapping, coverage assertions and submission are not implemented. A successful collection is not proof of effective end-to-end access. Do not mark missing or unsupported evidence as allow.
 
 References: [Salt iptables](https://docs.saltproject.io/en/3006/ref/modules/all/salt.modules.iptables.html), [Salt firewalld](https://docs.saltproject.io/en/master/ref/modules/all/salt.modules.firewalld.html), [Windows firewall rules and filters](https://learn.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule?view=windowsserver2022-ps), [Windows networking cmdlets](https://learn.microsoft.com/en-us/powershell/module/nettcpip/?view=win10-ps).
+
+External device mappings use namespace, object class and opaque ID. Existing emitted envelopes default to class `device`; for another class set `source.object_class` before submission and provision the matching mapping. See the [identity contract](../../../docs/INTEGRATION_API.md#external-device-identity-and-registered-clients).

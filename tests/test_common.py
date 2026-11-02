@@ -45,6 +45,18 @@ class DeviceTests(unittest.TestCase):
         self.assertEqual((result.status, result.device_id, result.candidates), ("review", None, (first, second)))
         self.assertTrue(result.requires_confirmation)
 
+    def test_class_and_source_isolate_opaque_ids(self):
+        devices = [DeviceEvidence(UUID(int=i), frozenset({identity})) for i, identity in enumerate([
+            ("CMDB", "NetworkNode", "000012313213"),
+            ("CMDB", "Server", "000012313213"),
+            ("other", "NetworkNode", "000012313213"),
+            ("CMDB", "000012313213"),
+        ], 1)]
+        args = dict(namespace="CMDB", platform=None, display_name=None,
+                    addresses=frozenset(), devices=devices, object_class="NetworkNode")
+        self.assertEqual(match_device(external_id="000012313213", **args).device_id, UUID(int=1))
+        self.assertEqual(match_device(external_id="12313213", **args).status, "unresolved")
+
     def test_conflicting_mappings_never_auto_merge(self):
         devices = [DeviceEvidence(UUID(int=i), frozenset({("cmdb", "42")})) for i in (1, 2)]
         result = match_device(namespace="cmdb", external_id="42", platform=None, display_name=None, addresses=frozenset(), devices=devices)

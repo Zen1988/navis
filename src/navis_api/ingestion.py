@@ -13,6 +13,14 @@ class Source(BaseModel):
     model_config = ConfigDict(extra="forbid")
     namespace: str = Field(min_length=1, max_length=255)
     external_device_id: str = Field(min_length=1, max_length=255)
+    object_class: str = Field(default="device", min_length=1, max_length=255)
+
+    @field_validator("namespace", "external_device_id", "object_class")
+    @classmethod
+    def identity_nonblank(cls, value: str) -> str:
+        if not value.strip() or value != value.strip():
+            raise ValueError("identity components must be nonblank without surrounding whitespace")
+        return value
 
 
 class DeviceMapping(BaseModel):
@@ -89,11 +97,11 @@ class PostgresIngestionProcessor:
                 claimed_id = submission.device_mapping.navis_device_id if submission.device_mapping else None
                 cursor.execute(
                     """INSERT INTO navis.ingestion_submission
-                       (id, source_system_id, external_device_id, claimed_device_id,
+                       (id, source_system_id, external_device_id, object_class, claimed_device_id,
                         adapter_name, input_format, format_version, data_type, collected_at,
                         completeness, payload, submitted_by, status)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_identity')""",
-                    (submission_id, source[0], submission.source.external_device_id, claimed_id,
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_identity')""",
+                    (submission_id, source[0], submission.source.external_device_id, submission.source.object_class, claimed_id,
                      submission.adapter.name, submission.adapter.input_format, submission.adapter.format_version,
                      submission.data_type, submission.collected_at, submission.completeness,
                      Jsonb(submission.payload), principal.subject),

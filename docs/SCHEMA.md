@@ -2,7 +2,7 @@
 
 Status: Draft, conceptual v1. This document specifies the initial relational model; it is not a migration or a promise that every platform can be normalized yet. PostgreSQL is authoritative. Apache AGE is a rebuildable projection, and original submissions remain available for reprocessing.
 
-An initial draft SQL implementation is in [001_initial.sql](../migrations/001_initial.sql). It needs PostgreSQL integration testing and further constraints before production use. In particular, temporal identity overlap, two complete link endpoints, cross-snapshot selector and zone consistency, normalization provenance for all object types, and rule-specific selector semantics need enforcement. JSON fields for flow selectors and NAT translations remain draft contracts. The migration does not implement adapter verification, graph construction, or analysis.
+An initial draft SQL implementation is in [001_initial.sql](../migrations/001_initial.sql). It needs PostgreSQL integration testing and further constraints before production use. Migration 016 adds temporal identity overlap enforcement; its upgrade/database integration remains unverified. Remaining constraints include two complete link endpoints, cross-snapshot selector and zone consistency, normalization provenance for all object types, and rule-specific selector semantics need enforcement. JSON fields for flow selectors and NAT translations remain draft contracts. The migration does not implement adapter verification, graph construction, or analysis.
 
 [002_ingestion_submission.sql](../migrations/002_ingestion_submission.sql) adds a staging record for raw submissions before device identity is resolved. The initial schema required a device snapshot before storing a payload, which could not represent unresolved imports. This staging record does not authorize the claimed device or create a snapshot.
 
@@ -16,7 +16,7 @@ All primary keys are UUIDs. `created_at` and `updated_at` use `timestamptz` wher
 | --- | --- | --- |
 | `source_system` | `id`, `namespace` (unique), `kind`, `name` | Collector, CMDB, or other external source. |
 | `device` | `id`, `vendor`, `platform`, optional `model`, `display_name`, `first_seen_at`, `last_seen_at` | Stable Navis identity; names and addresses are not identity. |
-| `device_identity_mapping` | `id`, `device_id` FK, `source_system_id` FK, `external_id`, `provenance`, `valid_from`, optional `valid_until` | Maps source identities to a device. Prevent overlapping active mappings for the same source and external ID; retain history. |
+| `device_identity_mapping` | `id`, `device_id` FK, `source_system_id` FK, `object_class`, `external_id`, `provenance`, `valid_from`, optional `valid_until` | Maps source identities to a device. Prevent overlapping validity intervals for the same source, object class and external ID; retain history. |
 | `import_batch` | `id`, `source_system_id` FK, `external_id`, `received_at`, `status` | Groups submitted data; enforce source-scoped idempotency when an external ID is supplied. |
 | `device_snapshot` | `id`, `device_id` FK, `import_batch_id` FK, `collected_at`, `received_at`, optional `firmware_version`, `platform_version`, `source_snapshot_id` | Configuration and operational evidence at a collection time. |
 | `snapshot_coverage` | `snapshot_id` FK, `data_type`, `coverage` (`complete`, `partial`, `unknown`), optional `scope`, `details` | Whether absence of a record is meaningful in a given scope. |
@@ -87,7 +87,7 @@ The exact selector, schedule and translation structures must be refined against 
 
 | Table | Key columns and relationships | Purpose |
 | --- | --- | --- |
-| `api_consumer` | `id`, `issuer`, `subject_or_client_id`, `name`, `status` | Optional local mapping to an externally managed application identity; unique issuer and identity. |
+| `api_consumer` | `id`, `issuer`, `subject_or_client_id`, `name`, `status`, `identity_source_system_id` FK, `identity_object_class` | Optional local mapping to an externally managed application identity; unique issuer and identity. |
 | `consumer_data_scope` | `api_consumer_id` FK, source namespace or other boundary, permissions | Local data boundaries if required; external token scopes still need enforcement. |
 | `audit_event` | `id`, optional `api_consumer_id` FK, `occurred_at`, `operation`, `resource_type`, `resource_id`, `outcome`, `details` | Records API activity without storing access tokens or device credentials. |
 
@@ -113,3 +113,5 @@ Migration 012 defines optional externally observed NAT session evidence. Packet 
 Kubernetes-style endpoint enforcement requires independently scoped source egress and destination ingress decisions. Native Kubernetes NetworkPolicy selection, additive rule semantics, namespace/pod selectors, IP blocks, and implementation-specific behavior must be interpreted by a dedicated adapter; the directional combiner accepts only normalized decisions. An HTTP Ingress resource is a separate application routing construct and is not equivalent to an ingress NetworkPolicy. The current relational schema and trace do not yet capture all endpoint selectors or connect directional policy evaluation to the API.
 
 Define deletion and retention policy, temporal identity matching, snapshot consistency, tenant or namespace boundaries, access-token validation, and exact vendor semantics before deploying a migration. Validate representative cases: overlapping VRFs, longest-prefix matching, NAT before and after enforcement, policy defaults, incomplete snapshots, multiple paths, and graph rebuilds. The system should return unknown when evidence is insufficient.
+
+Migration 016 enforces non-overlapping validity intervals for each external identity tuple. Ingestion stores `object_class`; `api_consumer.identity_object_class` selects the class returned from its configured identity source. All default to `device` for legacy records. See [external identity contract](INTEGRATION_API.md#external-device-identity-and-registered-clients).

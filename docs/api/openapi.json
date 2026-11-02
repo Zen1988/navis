@@ -367,6 +367,13 @@
             "maxLength": 255,
             "minLength": 1,
             "title": "External Device Id"
+          },
+          "object_class": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Object Class",
+            "default": "device"
           }
         },
         "additionalProperties": false,

@@ -892,3 +892,5 @@ Navis can identify rules that permit a particular flow locally while another con
 External collectors acquire infrastructure data and push it to Navis. Product adapters interpret submitted data; they do not access devices or manage device credentials. A CMDB or other external inventory may provide identity mappings.
 
 Application identity and credential management remain external. Navis may validate externally issued credentials and enforce API scopes and data boundaries. This refines the earlier authentication and authorization non-goal: Navis does not build an identity or credential management platform, but protects its APIs.
+
+External inventory references use `(namespace, object_class, external_device_id)`, such as `("CMDB", "NetworkNode", "000012313213")`, mapped with provenance and validity periods to a Navis device UUID. Registered clients select their response identity source/class independently of authentication and source permissions. See the [integration identity contract](INTEGRATION_API.md#external-device-identity-and-registered-clients).

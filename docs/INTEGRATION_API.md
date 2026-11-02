@@ -119,6 +119,7 @@ FastAPI exposes `/openapi.json`, `/docs` and `/redoc` with the default configura
 | Field | Required | Contract |
 | --- | --- | --- |
 | `source.namespace` | Yes | String length 1–255; registered source namespace with caller permission |
+| `source.object_class` | No | Exact source object class; defaults to `device`, length 1–255 |
 | `source.external_device_id` | Yes | String length 1–255; stable external identity, resolved at collection time |
 | `device_mapping` | No | Object containing only optional `navis_device_id` UUID or null |
 | `adapter.name`, `input_format`, `format_version` | Yes | Each string length 1–255; current worker supports only the tuple shown above |
@@ -307,7 +308,7 @@ Call `GET /v1/graph-builds/{build_id}/graph` with a completed build UUID supplie
   "nodes":[{
     "id":"30000000-0000-4000-8000-000000000001",
     "type":"device",
-    "external_identity":{"status":"mapped","namespace":"cmdb-site-a","id":"router-a"}
+    "external_identity":{"status":"mapped","namespace":"cmdb-site-a","object_class":"device","id":"router-a"}
   }],
   "connections":[],
   "projection_status":"device_identity_only"
@@ -629,3 +630,40 @@ The checked-in examples are synthetic documentation inputs. Their UUIDs/source m
 To reproduce the documentation checks after installing the project and `httpx`, run `python docs/api/verify_contract.py`. Use `--write` to regenerate OpenAPI and request/response fixtures when intentionally updating the contract. The checks cover all eight request examples, three response fixtures, all seven documented API paths, 202 staging and trace/session wrappers, authentication/scope rejection, invalid UUID/IP/extra-field handling, and snapshot drift. They use fake storage and do not start application services. On restricted Windows environments, asyncio's local socketpair may require running this check outside the execution sandbox.
 
 Implementation references: [HTTP boundary](../src/navis_api/main.py), [ingestion](../src/navis_api/ingestion.py), [normalized adapter](../src/navis_api/normalized_adapter.py), [worker](../src/navis_api/worker.py), [trace processor](../src/navis_api/trace_postgres.py), [sessions](../src/navis_api/trace_session.py), [graph response](../src/navis_api/graph_response.py). See [current status](STATUS.md) for broader development limits.
+
+
+### External device identity and registered clients
+
+The stable external identity is `(namespace, object_class, external_device_id)`.
+For example, submit:
+
+```json
+{"namespace":"CMDB","object_class":"NetworkNode","external_device_id":"000012313213"}
+```
+
+Display this as `CMDB:NetworkNode:000012313213`, but send separate fields;
+never parse a display string by splitting colons. IDs are opaque case-sensitive
+strings: preserve leading zeros and punctuation. Namespaces identify registered
+source instances; separate CMDB tenants/instances that can reuse IDs need separate
+namespaces. Class describes the source object type, independently of platform.
+
+`device.id` is the internal Navis UUID. `device_identity_mapping` links multiple
+external identities to that UUID with provenance and validity periods. The worker
+resolves the entire tuple at collection time. Missing/conflicting mappings or a
+mismatched claimed UUID require operator review; names/IPs never authorize merging.
+Mappings use half-open validity intervals so reassigned IDs retain historical meaning.
+
+Caller authentication is separate: issuer plus subject/client ID identifies an active
+registered consumer, whose source permission is required for ingestion. Knowing an
+ID grants no access. Configure `api_consumer.identity_source_system_id` and
+`identity_object_class` to select the identity returned to that client. Mapped graph
+identities include namespace, object_class and id. Missing/ambiguous results must be
+resolved before acting on an external object. Graph scope checks still apply.
+
+Apply migration `016_device_identity_class.sql` before deploying this code. Legacy
+mappings/submissions/consumers default to class `device`. Explicitly classify known
+CMDB mappings and configure clients before submitting `NetworkNode`; do not infer
+classes from old ID strings. The migration requires `btree_gist` and rejects existing
+overlapping mapping intervals; review and correct those with provenance before
+retrying. Registration and mapping administration remain trusted operator operations,
+without public HTTP endpoints.

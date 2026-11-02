@@ -45,11 +45,11 @@ def process_submission(connection_factory, submission_id):
     from psycopg.types.json import Jsonb
     with connection_factory() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT source_system_id, external_device_id, claimed_device_id, adapter_name, input_format, format_version, data_type, collected_at, completeness, payload, status FROM navis.ingestion_submission WHERE id=%s FOR UPDATE", (submission_id,))
+            cur.execute("SELECT source_system_id, external_device_id, claimed_device_id, adapter_name, input_format, format_version, data_type, collected_at, completeness, payload, status, object_class FROM navis.ingestion_submission WHERE id=%s FOR UPDATE", (submission_id,))
             row = cur.fetchone()
             if row is None:
                 raise LookupError("submission not found")
-            source, external, claimed, adapter, fmt, version, kind, collected, completeness, payload, status = row
+            source, external, claimed, adapter, fmt, version, kind, collected, completeness, payload, status, object_class = row
             if status in ("processed", "raw_only"):
                 raise ValueError("submission already processed")
             if (adapter, fmt, version) != ("navis", "normalized-json", "1"):
@@ -58,7 +58,7 @@ def process_submission(connection_factory, submission_id):
             cur.execute("SELECT 1 FROM navis.adapter_artifact WHERE product=%s AND version=%s AND artifact_name=%s AND digest_algorithm='sha256' AND digest=%s AND status='approved'", ("navis", "1", "normalized_adapter.py", digest))
             if cur.fetchone() is None:
                 raise PermissionError("adapter artifact is not approved")
-            cur.execute("SELECT DISTINCT device_id FROM navis.device_identity_mapping WHERE source_system_id=%s AND external_id=%s AND valid_from<=%s AND (valid_until IS NULL OR valid_until>%s)", (source, external, collected, collected))
+            cur.execute("SELECT DISTINCT device_id FROM navis.device_identity_mapping WHERE source_system_id=%s AND external_id=%s AND object_class=%s AND valid_from<=%s AND (valid_until IS NULL OR valid_until>%s)", (source, external, object_class, collected, collected))
             devices = [r[0] for r in cur.fetchall()]
             if len(devices) != 1 or (claimed is not None and claimed != devices[0]):
                 raise ValueError("device identity requires confirmation")

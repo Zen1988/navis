@@ -8,7 +8,7 @@ from uuid import UUID
 @dataclass(frozen=True)
 class DeviceEvidence:
     device_id: UUID
-    identities: frozenset[tuple[str, str]] = frozenset()
+    identities: frozenset[tuple[str, str] | tuple[str, str, str]] = frozenset()
     platform: str | None = None
     display_name: str | None = None
     addresses: frozenset[str] = frozenset()
@@ -29,7 +29,8 @@ class DeviceMatch:
 
 def match_device(*, namespace: str | None, external_id: str | None,
                  platform: str | None, display_name: str | None,
-                 addresses: frozenset[str], devices: list[DeviceEvidence]) -> DeviceMatch:
+                 addresses: frozenset[str], devices: list[DeviceEvidence],
+                 object_class: str = "device") -> DeviceMatch:
     """Resolve a trusted current source mapping, or return candidates for review.
 
     Callers supply only mappings valid at the relevant time and source namespace.
@@ -40,9 +41,12 @@ def match_device(*, namespace: str | None, external_id: str | None,
         raise ValueError("namespace and external ID must be supplied together")
     if namespace is not None and (not namespace.strip() or not external_id.strip()):
         raise ValueError("namespace and external ID must be nonempty")
+    if not object_class.strip() or object_class != object_class.strip():
+        raise ValueError("object class must be nonblank without surrounding whitespace")
     incoming_ips = {ip_address(value) for value in addresses}
     if namespace is not None:
-        exact = {d.device_id for d in devices if (namespace, external_id) in d.identities}
+        exact = {d.device_id for d in devices if (namespace, object_class, external_id) in d.identities
+                 or (object_class == "device" and (namespace, external_id) in d.identities)}
         if len(exact) == 1:
             return DeviceMatch("matched", next(iter(exact)), tuple(exact), "trusted external identity mapping")
         if len(exact) > 1:
