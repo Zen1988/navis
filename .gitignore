@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 .env
 *.egg-info/
+navis-secret.env
+.env.*
+!.env.example

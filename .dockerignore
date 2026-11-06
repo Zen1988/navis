@@ -3,3 +3,9 @@ __pycache__
 *.pyc
 .venv
 .env
+.env.*
+!.env.example
+navis-secret.env
+.test-tmp
+*.dump
+*.egg-info
