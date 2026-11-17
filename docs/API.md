@@ -11,7 +11,10 @@ The current consumer reference is the [API integration guide](INTEGRATION_API.md
 
 Companion artifacts:
 
-- [Incremental topology and on-demand trace workflow](TOPOLOGY_WORKFLOW.md)
+- [Named topology, version history and on-demand trace workflow](TOPOLOGY_WORKFLOW.md)
+- [Active data and audit retention](DATA_LIFECYCLE.md)
+- [Application/database upgrade toolkit](UPGRADING.md)
+- [Ingestion counts, validation, errors and collection progress](INGESTION_PROGRESS.md)
 - [Generated OpenAPI snapshot](api/openapi.json)
 - [Complete request examples](api/examples/)
 - [Contract verification script and instructions](api/README.md)

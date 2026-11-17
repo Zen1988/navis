@@ -49,6 +49,7 @@ def examples():
             source=dict(namespace='collector-site-a',external_device_id='router-a' if kind in ('interface','route','neighbor','mac') else 'firewall-a'),
             adapter=dict(name='navis',input_format='normalized-json',format_version='1'),data_type=kind,
             collected_at='2026-10-30T04:00:00Z',completeness='partial',payload=dict(entries=values))
+    result['ingestion-collection-interface.json'] = dict(deepcopy(result['ingestion-interface.json']), collection_run_id='ansible-site-a-20261117-001', expected_submissions=1, expected_items=1)
     result['trace.json'] = dict(graph_build_id=BUILD,caller_session_id='myproject-20261030-7b1c4d',source='192.0.2.10;192.0.2.11',
         destination='198.51.100.5',protocol='tcp',source_port=51000,destination_port=443)
     return result
@@ -77,7 +78,7 @@ def http_boundary_checks(envelope, trace_request, trace_result):
             return None
     class Ingest:
         def submit(self, submission, principal):
-            return dict(ingestion_id=RECEIPT,status='pending_identity')
+            return dict(ingestion_id=RECEIPT,status='pending_identity',collection_run_id=None,input_items=1)
     class Trace:
         def trace(self, request, flows, principal):
             return deepcopy(trace_result)
@@ -101,7 +102,7 @@ def http_boundary_checks(envelope, trace_request, trace_result):
         assert client.get('/health/live').json() == {'status':'ok'}
         assert client.post('/v1/ingestions',json=envelope).status_code == 401
         response = client.post('/v1/ingestions',headers=headers,json=envelope)
-        assert response.status_code == 202 and response.json() == dict(ingestion_id=RECEIPT,status='pending_identity')
+        assert response.status_code == 202 and response.json() == dict(ingestion_id=RECEIPT,status='pending_identity',collection_run_id=None,input_items=1)
         assert client.get('/v1/graph-builds/'+BUILD+'/graph',headers=headers).json()['projection_status'] == 'device_identity_only'
         assert client.get('/v1/graph-builds/invalid/graph',headers=headers).status_code == 422
         response = client.post('/v1/traces',headers=headers,json=trace_request)
@@ -131,10 +132,10 @@ def main():
         else:
             assert len(TraceRequest.model_validate(value).flows()) == 2
     schema = app.openapi()
-    assert len(schema['paths']) == 13
+    assert len(schema['paths']) == 19
     trace_result = unresolved_trace(values['trace.json'])
     responses = {
-        'ingestion-accepted.json': dict(ingestion_id=RECEIPT,status='pending_identity'),
+        'ingestion-accepted.json': dict(ingestion_id=RECEIPT,status='pending_identity',collection_run_id=None,input_items=1),
         'trace-unresolved.json':dict(code='TRACE_RESULT_READY',caller_session_id=values['trace.json']['caller_session_id'],trace_session_id=SESSION,**trace_result),
         'recommendations-unavailable.json':dict(code='RECOMMENDATIONS_UNAVAILABLE',caller_session_id=values['trace.json']['caller_session_id'],trace_session_id=SESSION,recommendations=[dict(status='unavailable',result=None)])}
     artifacts = {ROOT/'openapi.json':schema, **{ROOT/'examples'/name:value for name,value in values.items()},
@@ -146,7 +147,7 @@ def main():
         else:
             assert json.loads(path.read_text(encoding='utf-8')) == value, 'stale artifact: ' + str(path)
     http_boundary_checks(values['ingestion-interface.json'],values['trace.json'],trace_result)
-    print('Validated 8 requests, 3 response fixtures, 13 API paths, OpenAPI and mocked HTTP/trace checks.')
+    print('Validated 9 requests, 3 response fixtures, 19 API paths, OpenAPI and mocked HTTP/trace checks.')
 
 
 if __name__ == '__main__':

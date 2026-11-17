@@ -1,16 +1,64 @@
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Navis test console</title>
-<style>body{font:16px system-ui;background:#f4f7fa;color:#172c3d;margin:0}main{max-width:900px;margin:auto;padding:2rem}h1{margin-bottom:.25rem}section{background:white;padding:1.5rem;border-radius:10px;margin:1rem 0;box-shadow:0 2px 12px #122c4010}label{display:block;margin:.8rem 0 .3rem}input,select,textarea{box-sizing:border-box;width:100%;padding:.65rem;border:1px solid #aebec9;border-radius:5px;font:inherit}button{background:#146379;color:white;border:0;border-radius:5px;padding:.7rem 1rem;margin-top:1rem;cursor:pointer}pre{overflow:auto;background:#102b3a;color:#e0f4f2;padding:1rem;border-radius:5px;white-space:pre-wrap}small{color:#526b78}</style></head>
-<body><main><h1>Navis test console</h1><p>Submit a trace or inspect an existing graph.</p>
-<section><label for="token">Bearer token</label><input id="token" type="password" autocomplete="off"><small>Used for this request only; not saved by this page.</small></section>
-<section><h2>Trace connectivity</h2><label for="namespace">Namespace</label><input id="namespace" placeholder="Required when multiple namespaces are authorized"><label for="build">Graph build UUID (optional)</label><input id="build" placeholder="Leave blank to prepare current topology"><label for="session">Caller session ID</label><input id="session" placeholder="Leave blank to generate a session ID"><label for="source">Source IPs</label><textarea id="source" rows="2" placeholder="10.0.0.1, 10.0.0.2"></textarea><label for="destination">Destination IPs</label><textarea id="destination" rows="2" placeholder="10.1.0.1; 10.1.0.2"></textarea><label for="protocol">Protocol</label><select id="protocol"><option>tcp</option><option>udp</option><option>icmp</option><option>icmpv6</option></select><label for="port">Destination port (optional)</label><input id="port" type="number" min="0" max="65535"><button id="trace">Run trace</button> <button id="graph">Read graph</button> <button id="sessionGraph">Read session graph</button> <button id="builds">List graph builds</button> <button id="recommendations">Get recommendation draft</button></section>
+<style>body{font:16px system-ui;background:#f4f7fa;color:#172c3d;margin:0}main{max-width:900px;margin:auto;padding:2rem}h1{margin-bottom:.25rem}section{background:white;padding:1.5rem;border-radius:10px;margin:1rem 0;box-shadow:0 2px 12px #122c4010}label{display:block;margin:.8rem 0 .3rem}input,select,textarea{box-sizing:border-box;width:100%;padding:.65rem;border:1px solid #aebec9;border-radius:5px;font:inherit}button{background:#146379;color:white;border:0;border-radius:5px;padding:.7rem 1rem;margin-top:1rem;cursor:pointer}pre{overflow:auto;background:#102b3a;color:#e0f4f2;padding:1rem;border-radius:5px;white-space:pre-wrap}small{color:#526b78}details{margin-top:1rem}</style></head>
+<body><main><h1>Navis test console</h1><p>Select a topology by name, inspect its history or submit a trace.</p>
+<section><label for="token">Bearer token</label><input id="token" type="password" autocomplete="off"><small>Kept in this page's memory; not saved in browser storage.</small></section>
+<section><h2>Topology</h2>
+<label for="namespace">Namespace</label><input id="namespace" placeholder="Required when multiple namespaces are authorized">
+<label for="topologyName">Topology name</label><input id="topologyName" value="default" maxlength="255" list="topologyNames"><datalist id="topologyNames"></datalist>
+<small>Default contains all collected network data. Use an application name for a selected server group.</small>
+<label for="members">Application servers or IPs</label><textarea id="members" rows="3" placeholder="appserver1, appserver2, appserver3&#10;dbserver1, dbserver2, dbserver3"></textarea>
+<small>Leave empty to refresh saved members. Unknown inventory names remain unresolved.</small>
+<button id="prepare">Create or refresh</button> <button id="topologies">List names</button> <button id="versions">Load versions</button>
+<label for="version">Version</label><select id="version"><option value="">Latest</option></select>
+<small>Build date is when content changed; update date is its last recheck. Audit versions are inspection-only.</small>
+<button id="graph">Read graph</button>
+<label for="compareFrom">Compare from</label><select id="compareFrom"><option value="">Load versions first</option></select>
+<label for="compareTo">Compare to</label><select id="compareTo"><option value="">Latest</option></select><button id="compare">Compare versions</button>
+<details><summary>Specific internal build (advanced)</summary><label for="build">Graph build UUID</label><input id="build" placeholder="Overrides topology name/version for graph reads and traces"><button id="builds">List internal builds</button></details>
+</section>
+<section><h2>Trace connectivity</h2><label for="session">Caller session ID (optional)</label><input id="session" placeholder="Leave blank to generate a session ID">
+<label for="source">Source IPs</label><textarea id="source" rows="2" placeholder="10.0.0.1, 10.0.0.2"></textarea>
+<label for="destination">Destination IPs</label><textarea id="destination" rows="2" placeholder="10.1.0.1; 10.1.0.2"></textarea>
+<label for="protocol">Protocol</label><select id="protocol"><option>tcp</option><option>udp</option><option>icmp</option><option>icmpv6</option></select>
+<label for="port">Destination port (optional)</label><input id="port" type="number" min="0" max="65535">
+<button id="trace">Run trace</button> <button id="sessionGraph">Read session graph</button> <button id="recommendations">Get recommendation draft</button> <button id="sessions">List active sessions</button></section>
 <section><h2>Response</h2><pre id="result" aria-live="polite">No request sent.</pre></section></main>
 <script>
-const el=id=>document.getElementById(id); async function call(path,options={}) { const headers={...options.headers}; if(el('token').value) headers.Authorization='Bearer '+el('token').value; try {const response=await fetch(path,{...options,headers}); const text=await response.text(); let data; try {data=JSON.parse(text)} catch {data=text} el('result').textContent=JSON.stringify({http_status:response.status,body:data},null,2); return response.ok ? data : null} catch(error){el('result').textContent='Request failed: '+error.message} }
-el('trace').onclick=async()=>{const body={source:el('source').value,destination:el('destination').value,protocol:el('protocol').value,destination_port:el('port').value===''?null:Number(el('port').value)}; if(el('build').value.trim()) body.graph_build_id=el('build').value.trim(); if(el('session').value.trim()) body.caller_session_id=el('session').value.trim(); if(el('namespace').value.trim()) body.namespace=el('namespace').value.trim(); const data=await call('/v1/traces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); if(data) el('session').value=data.caller_session_id;};
-el('graph').onclick=()=>call('/v1/graph-builds/'+encodeURIComponent(el('build').value)+'/graph');
+const el=id=>document.getElementById(id);
+const topologyName=()=>el('topologyName').value.trim()||'default';
+const query=(values={})=>{const p=new URLSearchParams(values);if(el('namespace').value.trim())p.set('namespace',el('namespace').value.trim());return p.size?'?'+p.toString():''};
+const namedPath=()=>'/v1/topologies/by-name/'+encodeURIComponent(topologyName());
+async function call(path,options={}) {
+  const headers={...options.headers}; if(el('token').value)headers.Authorization='Bearer '+el('token').value;
+  try {const response=await fetch(path,{...options,headers});const text=await response.text();let data;try{data=JSON.parse(text)}catch{data=text}
+    el('result').textContent=JSON.stringify({http_status:response.status,body:data},null,2);return response.ok?data:null;
+  }catch(error){el('result').textContent='Request failed: '+error.message}
+}
+const resetVersions=()=>{el('version').replaceChildren(new Option('Latest',''));el('compareFrom').replaceChildren(new Option('Load versions first',''));el('compareTo').replaceChildren(new Option('Latest',''))};
+el('topologyName').onchange=resetVersions;el('namespace').onchange=resetVersions;
+el('prepare').onclick=async()=>{
+  const members=el('members').value.split(/[,;\n]+/).map(s=>s.trim()).filter(Boolean);
+  const body={name:topologyName()};if(members.length)body.members=members;if(el('namespace').value.trim())body.namespace=el('namespace').value.trim();
+  await call('/v1/topologies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+};
+el('topologies').onclick=async()=>{const data=await call('/v1/topologies'+query());if(data){el('topologyNames').replaceChildren();for(const t of data.topologies){const option=document.createElement('option');option.value=t.name;option.label=t.namespace;el('topologyNames').append(option)}}};
+el('versions').onclick=async()=>{
+  const data=await call(namedPath()+'/versions'+query({include_audit:'true'}));if(!data)return;
+  el('version').replaceChildren(new Option('Latest',''));el('compareFrom').replaceChildren(new Option('Choose a version',''));el('compareTo').replaceChildren(new Option('Latest',''));
+  for(const version of data.versions){const label='Built '+version.built_at+'; checked '+version.updated_at+'; '+(version.lifecycle?.storage_status||'live');for(const id of ['version','compareFrom','compareTo'])el(id).append(new Option(label,version.version_id))}
+};
+el('graph').onclick=()=>call(el('build').value.trim()?'/v1/graph-builds/'+encodeURIComponent(el('build').value.trim())+'/graph':namedPath()+query(el('version').value?{version_id:el('version').value}:{}));
+el('compare').onclick=()=>{if(!el('compareFrom').value){el('result').textContent='Load versions and choose a starting version.';return}const q={from_version:el('compareFrom').value};if(el('compareTo').value)q.to_version=el('compareTo').value;call(namedPath()+'/compare'+query(q))};
+el('trace').onclick=async()=>{
+  const body={source:el('source').value,destination:el('destination').value,protocol:el('protocol').value,destination_port:el('port').value===''?null:Number(el('port').value)};
+  if(el('build').value.trim())body.graph_build_id=el('build').value.trim();else{body.topology_name=topologyName();if(el('version').value)body.topology_version_id=el('version').value}
+  if(el('session').value.trim())body.caller_session_id=el('session').value.trim();if(el('namespace').value.trim())body.namespace=el('namespace').value.trim();
+  const data=await call('/v1/traces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(data)el('session').value=data.caller_session_id;
+};
 el('sessionGraph').onclick=()=>call('/v1/trace-sessions/'+encodeURIComponent(el('session').value)+'/graph');
-el('builds').onclick=()=>call('/v1/graph-builds'+(el('namespace').value.trim()?'?namespace='+encodeURIComponent(el('namespace').value.trim()):''));
 el('recommendations').onclick=()=>call('/v1/trace-sessions/'+encodeURIComponent(el('session').value)+'/recommendations');
+el('builds').onclick=()=>call('/v1/graph-builds'+query());
+el('sessions').onclick=()=>call('/v1/trace-sessions');
 </script></body></html>

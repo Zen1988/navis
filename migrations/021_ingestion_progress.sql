@@ -1,0 +1,16 @@
+BEGIN;
+SET LOCAL search_path = navis, public;
+ALTER TABLE ingestion_submission ADD COLUMN submitted_consumer_id uuid REFERENCES api_consumer(id);
+ALTER TABLE ingestion_submission ADD COLUMN collection_run_id text;
+ALTER TABLE ingestion_submission ADD COLUMN expected_submissions integer CHECK(expected_submissions>0);
+ALTER TABLE ingestion_submission ADD COLUMN expected_items bigint CHECK(expected_items>=0);
+ALTER TABLE ingestion_submission ADD COLUMN input_items integer CHECK(input_items>=0);
+ALTER TABLE ingestion_submission ADD COLUMN processed_items integer NOT NULL DEFAULT 0 CHECK(processed_items>=0);
+ALTER TABLE ingestion_submission ADD COLUMN processing_attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE ingestion_submission ADD COLUMN last_attempt_at timestamptz;
+ALTER TABLE ingestion_submission ADD COLUMN processing_error jsonb;
+UPDATE ingestion_submission SET input_items=jsonb_array_length(payload->'entries') WHERE jsonb_typeof(payload->'entries')='array';
+UPDATE ingestion_submission SET processed_items=COALESCE(input_items,0),processing_attempts=1,last_attempt_at=updated_at WHERE status='processed';
+UPDATE ingestion_submission SET processing_attempts=1,last_attempt_at=updated_at WHERE status='raw_only';
+CREATE INDEX ingestion_collection_progress ON ingestion_submission(submitted_consumer_id,collection_run_id,source_system_id,received_at);
+COMMIT;

@@ -2,12 +2,18 @@
 
 The API now orchestrates incremental namespace builds, named IP-selected views,
 and on-demand trace builds. See [topology workflow](TOPOLOGY_WORKFLOW.md) and
-apply migration 018. The older operational notes below describe the original
+apply migrations through 021. The older operational notes below describe the original
 builder and its remaining graph semantics limitations.
+
+The API projection includes unmanaged placeholders for unresolved next-hop IPs.
+Trace visibility graphs and session graph responses show missing endpoints and
+unknown segments explicitly; those placeholders are presentation evidence and
+are not inserted into device inventory or the AGE forwarding graph. See
+[visibility gaps](TOPOLOGY_WORKFLOW.md#unmanaged-nodes-and-visibility-gaps).
 
 `navis_api.graph_builder.build_graph(connection_factory, dataset_id)` builds a persistent Apache AGE graph per build, from an explicitly populated `graph_dataset_snapshot`. Apply all migrations through 018 and install a compatible PostgreSQL/AGE extension before use. Each graph contains device, snapshot-specific interface and route vertices; device/interface, device/route, route/outgoing-interface, and declared interface-to-interface link relationships. Graph properties reference relational UUIDs so route attributes, provenance and completeness remain in PostgreSQL.
 
-`graph_config` controls inclusion of manual and discovered declared links. `topology_link` and its endpoints store declared connection data; application membership remains relational. The build records its selected snapshots and never changes when new data arrives. The API creates a new dataset/build after ingestion; direct Python builder callers still supply their own dataset. Older graphs remain until a retention mechanism is built.
+`graph_config` controls inclusion of manual and discovered declared links. `topology_link` and its endpoints store declared connection data; application membership remains relational. The build records its selected snapshots and never changes when new data arrives. The API creates a new dataset/build after ingestion; direct Python builder callers still supply their own dataset. Unchanged content keeps its graph; changed versions retain history. The [retention runner](DATA_LIFECYCLE.md) archives eligible inactive history after 90 days and purges audit storage one year after archival.
 
 This is a draft: it does not derive links from MAC or neighbor observations, create segment links, derive complete application semantics or evaluate reachability. The topology API adds IP-selected candidate views. A route edge is evidence of an outgoing interface, not an unconditional route. An earlier version built successfully against a local AGE instance; reconciliation and the three-device fixture still need live verification. Inspect dataset coverage and time consistency before relying on a graph.
 
@@ -15,4 +21,4 @@ This is a draft: it does not derive links from MAC or neighbor observations, cre
 
 The builder now groups interfaces with the same device UUID and native ID across selected snapshots. It uses one selected interface UUID as the graph vertex ID and redirects route and declared-link edges to it. This is an initial reconciliation: the graph vertex does not yet enumerate all supporting interface records, conflicting attributes are not resolved, and stable native IDs must be consistent across collectors. Use relational snapshot records for provenance.
 
-Migration 007 assigns an optional identity source to each API consumer; migration 016 adds `identity_object_class` (default `device`). `GET /v1/graph-builds/{id}/graph` requires `graph:read`; its optional configured graph reader verifies source-specific access for every snapshot and maps devices to that consumer's configured identity source and object class. A mapped `external_identity` contains `namespace`, `object_class` and opaque string `id`; the node `id` remains the internal Navis UUID. Mappings must cover every selected collection time. Missing or conflicting mappings are explicit. The current reader returns device identities only with `projection_status: device_identity_only`; it does not yet retrieve AGE vertices or connections. The default reader is unavailable, and PostgreSQL integration remains untested.
+Migration 007 assigns an optional identity source to each API consumer; migration 016 adds `identity_object_class` (default `device`). `GET /v1/graph-builds/{id}/graph` requires `graph:read`; its optional configured graph reader verifies source-specific access for every snapshot and maps devices to that consumer's configured identity source and object class. A mapped `external_identity` contains `namespace`, `object_class` and opaque string `id`; the node `id` remains the internal Navis UUID. Mappings must cover every selected collection time. Missing or conflicting mappings are explicit. Legacy operator builds retain the identity-only response with `projection_status: device_identity_only`. API-created builds add the frozen network-evidence projection and visible unmanaged gaps; `GET /v1/topologies/by-name/{name}` is the primary name-based interface. PostgreSQL/AGE integration for the latest workflow remains to be validated.

@@ -19,7 +19,7 @@ For installation, Ubuntu image builds, Docker/Podman and Kubernetes, see the [se
 
 For integrations from other projects, see the [API integration guide](docs/INTEGRATION_API.md), [OpenAPI snapshot](docs/api/openapi.json) and [validated request examples](docs/api/examples/).
 
-For incremental Ansible ingestion, automatic namespace topology builds, named IP-selected views and tracing without a pre-created build, see the [topology API workflow](docs/TOPOLOGY_WORKFLOW.md). Apply migration 018 before using these APIs.
+For incremental Ansible ingestion, automatic namespace topology builds, named IP-selected views and tracing without a pre-created build, see the [topology API workflow](docs/TOPOLOGY_WORKFLOW.md). Apply migrations through 021 before using these APIs. See the [application/database upgrade toolkit](docs/UPGRADING.md) and [active data/audit retention](docs/DATA_LIFECYCLE.md).
 
 Navis answers a simple question:
 

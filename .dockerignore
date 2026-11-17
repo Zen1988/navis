@@ -8,4 +8,5 @@ __pycache__
 navis-secret.env
 .test-tmp
 *.dump
+backups
 *.egg-info

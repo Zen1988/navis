@@ -1,5 +1,6 @@
 """Transactional processor for the built-in normalized adapter."""
 import hashlib
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,6 +38,26 @@ def _write_selectors(cur, snapshot, point_id, rule_id, selectors, policy):
 
 
 def process_submission(connection_factory, submission_id):
+    """Persist failure diagnostics separately after atomic normalization rolls back."""
+    try:
+        return _process_submission(connection_factory, submission_id)
+    except Exception as exc:
+        from psycopg.types.json import Jsonb
+        expected = isinstance(exc, (ValueError, PermissionError, LookupError))
+        error = {"code": "VALIDATION_OR_IDENTITY_FAILED" if expected else "WORKER_ERROR",
+                 "message": str(exc)[:1000] if expected else "Database or worker error; inspect service logs and retry.",
+                 "normalization_committed": False}
+        try:
+            with connection_factory() as conn, conn.cursor() as cur:
+                cur.execute("""UPDATE navis.ingestion_submission SET processing_error=%s,
+                    processing_attempts=processing_attempts+1,last_attempt_at=now(),updated_at=now()
+                    WHERE id=%s AND status NOT IN ('processed','raw_only')""", (Jsonb(error), submission_id))
+        except Exception:
+            logging.getLogger(__name__).exception("Could not persist processing failure for ingestion %s", submission_id)
+        raise
+
+
+def _process_submission(connection_factory, submission_id):
     """Process one staged submission; failures roll back all database writes.
 
     Invoke only from a trusted worker with restricted database permissions.
@@ -160,5 +181,7 @@ def process_submission(connection_factory, submission_id):
                     details = {**entry.get("details", {}), "selectors_complete": False}
                     cur.execute("INSERT INTO navis.policy_rule(id,rule_set_id,native_rule_id,position,action,enabled,details) VALUES (%s,%s,%s,%s,%s,%s,%s)", (policy_id, rulesets[key][0], entry["rule_id"], entry["position"], entry["action"], entry["enabled"], Jsonb(details)))
                     _write_selectors(cur, snapshot, points[point], policy_id, entry["selectors"], True)
-            cur.execute("UPDATE navis.ingestion_submission SET status=%s, snapshot_id=%s WHERE id=%s", ("processed" if supported else "raw_only", snapshot, submission_id))
+            cur.execute("""UPDATE navis.ingestion_submission SET status=%s,snapshot_id=%s,updated_at=now(),
+                processed_items=%s,processing_attempts=processing_attempts+1,last_attempt_at=now(),processing_error=NULL WHERE id=%s""",
+                        ("processed" if supported else "raw_only", snapshot, len(entries) if supported else 0, submission_id))
     return snapshot

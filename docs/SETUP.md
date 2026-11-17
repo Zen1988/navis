@@ -78,30 +78,26 @@ Continue with PostgreSQL below, then build the Ubuntu application image.
 
 ## 1. Prepare PostgreSQL
 
-Create a dedicated database. Apply all SQL files in `migrations/` in filename
-order, once per database. Set `NAVIS_DATABASE_URL` securely first. In PowerShell:
+Create a dedicated database with a compatible PostgreSQL/Apache AGE installation;
+install/enable AGE separately. The application image contains no database server.
+The current API requires migrations **001–021**.
 
-```powershell
-Get-ChildItem migrations/*.sql | Sort-Object Name | ForEach-Object {
-    psql --dbname=$env:NAVIS_DATABASE_URL -v ON_ERROR_STOP=1 -f $_.FullName
-    if ($LASTEXITCODE -ne 0) { throw "Migration failed: $($_.Name)" }
-}
+For both new installations and upgrades, use the [upgrade toolkit](UPGRADING.md).
+It creates a checked backup, tracks SQL file checksums in
+`navis.schema_migration`, and applies each pending migration transactionally:
+
+```text
+python -m navis_api.migrate plan
+python -m navis_api.migrate apply --backup-dir backups
 ```
 
-On Linux with Bash:
-
-```bash
-for migration in migrations/*.sql; do
-  psql --dbname="$NAVIS_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration" || exit 1
-done
-```
-
-There is no migration ledger: do not rerun this loop on an existing installation.
-Back up before upgrades and apply only unapplied migrations. Migration 016 needs
-permission to install `btree_gist` and rejects overlapping historical mappings.
-PostgreSQL without Apache AGE supports API staging; graph operations require a
-compatible PostgreSQL/AGE installation and separately enabled AGE extension.
-The application image contains neither a database server nor AGE.
+These commands need the installed project, PostgreSQL client tools and a securely
+configured `NAVIS_DATABASE_URL`. The same commands run from the application
+container with `--entrypoint python`; the upgrade guide covers Docker/Podman,
+Windows, Kubernetes, backup mounts and rollback. Existing databases without a
+ledger must explicitly adopt their known last-applied migration first; do not
+rerun old SQL files. Migration 016 requires `btree_gist` and rejects overlapping
+historical identity mappings. Stop writers before applying schema changes.
 
 Provision a source, consumer and data scopes with the SQL in the
 [deployment guide](../deploy/README.md). Source authorization requires these rows
@@ -122,7 +118,7 @@ podman run --rm --entrypoint cat navis:local /etc/os-release
 ```
 
 The image runs as UID 10001 on port 8000 and includes the API, web console,
-registration CLI and migrations. With migration 018, ingestion triggers a
+registration CLI and migrations. With migrations through 021, ingestion triggers a
 best-effort background normalization and namespace topology build. This does not
 start a separate durable worker service.
 

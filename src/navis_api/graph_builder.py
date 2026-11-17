@@ -13,7 +13,7 @@ def _cypher(cur, graph, query):
     cur.execute(f"SELECT * FROM ag_catalog.cypher('{graph}', $$ {query} $$) AS (v ag_catalog.agtype)")
 
 
-def build_graph(connection_factory, dataset_id):
+def build_graph(connection_factory, dataset_id, *, after_build=None):
     dataset_id = UUID(str(dataset_id))
     build_id = uuid4()
     graph = "navis_" + build_id.hex
@@ -37,7 +37,7 @@ def build_graph(connection_factory, dataset_id):
             for device in sorted(device_ids):
                 _cypher(cur, graph, f"CREATE (:Device {{id: '{device}'}})")
             # Vertices are snapshot-specific and preserve relational provenance.
-            cur.execute("SELECT i.id, s.device_id, i.snapshot_id, i.native_id FROM navis.interface i JOIN navis.device_snapshot s ON s.id=i.snapshot_id JOIN navis.graph_dataset_snapshot d ON d.snapshot_id=i.snapshot_id AND d.device_id=s.device_id WHERE d.dataset_id=%s ORDER BY s.device_id, i.native_id, i.id", (dataset_id,))
+            cur.execute("SELECT i.id, s.device_id, i.snapshot_id, i.native_id FROM navis.interface i JOIN navis.device_snapshot s ON s.id=i.snapshot_id JOIN navis.graph_dataset_snapshot d ON d.snapshot_id=i.snapshot_id AND d.device_id=s.device_id WHERE d.dataset_id=%s ORDER BY s.device_id, i.native_id, (d.data_type='interface') DESC, i.id", (dataset_id,))
             interface_rows = cur.fetchall()
             interface_ids = {}
             canonical = {}
@@ -62,11 +62,12 @@ def build_graph(connection_factory, dataset_id):
                 if iface in interface_ids:
                     iface = interface_ids[iface]
                     _cypher(cur, graph, f"MATCH (r:Route {{id: '{route}'}}), (i:Interface {{id: '{iface}'}}) CREATE (r)-[:OUTGOING_INTERFACE {{source_id: '{hop}'}}]->(i)")
-            cur.execute("SELECT l.id, l.origin, a.interface_id, b.interface_id FROM navis.topology_link l JOIN navis.topology_link_endpoint a ON a.link_id=l.id AND a.endpoint_number=1 JOIN navis.topology_link_endpoint b ON b.link_id=l.id AND b.endpoint_number=2 LEFT JOIN navis.graph_config c ON c.dataset_id=%s WHERE a.interface_id IS NOT NULL AND b.interface_id IS NOT NULL AND (l.valid_until IS NULL OR l.valid_until > now()) AND (l.valid_from IS NULL OR l.valid_from <= now()) AND ((l.origin='manual' AND COALESCE(c.include_manual_links,true)) OR (l.origin<>'manual' AND COALESCE(c.include_discovered_links,true)))", (dataset_id,))
-            for link, origin, left, right in cur.fetchall():
-                link, left, right = _uuid(link), _uuid(left), _uuid(right)
-                if left in interface_ids and right in interface_ids:
-                    left, right = interface_ids[left], interface_ids[right]
+            cur.execute("SELECT l.id, l.origin, sa.device_id, ia.native_id, sb.device_id, ib.native_id FROM navis.topology_link l JOIN navis.topology_link_endpoint a ON a.link_id=l.id AND a.endpoint_number=1 JOIN navis.topology_link_endpoint b ON b.link_id=l.id AND b.endpoint_number=2 JOIN navis.interface ia ON ia.id=a.interface_id JOIN navis.device_snapshot sa ON sa.id=ia.snapshot_id JOIN navis.interface ib ON ib.id=b.interface_id JOIN navis.device_snapshot sb ON sb.id=ib.snapshot_id LEFT JOIN navis.graph_config c ON c.dataset_id=%s WHERE a.interface_id IS NOT NULL AND b.interface_id IS NOT NULL AND (l.valid_until IS NULL OR l.valid_until > now()) AND (l.valid_from IS NULL OR l.valid_from <= now()) AND ((l.origin='manual' AND COALESCE(c.include_manual_links,true)) OR (l.origin<>'manual' AND COALESCE(c.include_discovered_links,true)))", (dataset_id,))
+            for link, origin, left_device, left_native, right_device, right_native in cur.fetchall():
+                link = _uuid(link)
+                left = canonical.get((_uuid(left_device), left_native))
+                right = canonical.get((_uuid(right_device), right_native))
+                if left and right:
                     relationship = "MANUAL_LINK" if origin == "manual" else "DISCOVERED_LINK"
                     _cypher(cur, graph, f"MATCH (a:Interface {{id: '{left}'}}), (b:Interface {{id: '{right}'}}) CREATE (a)-[:{relationship} {{source_id: '{link}'}}]->(b)")
             # A next-hop IP is route-specific evidence, not a physical link.
@@ -103,4 +104,5 @@ def build_graph(connection_factory, dataset_id):
             from psycopg.types.json import Jsonb
             manifest = evidence_manifest(cur, dataset_id)
             cur.execute("UPDATE navis.graph_build SET status='completed',completed_at=now(),evidence_manifest=%s WHERE id=%s", (Jsonb(manifest), build_id))
-    return {"build_id": str(build_id), "graph_name": graph}
+            publication = after_build(cur, build_id) if after_build is not None else None
+    return {"build_id": str(build_id), "graph_name": graph, "publication": publication}

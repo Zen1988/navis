@@ -15,7 +15,11 @@ python -m pip install -e . httpx
 python docs/api/verify_contract.py
 ```
 
-The schema now includes 13 paths, including topology creation/read, build listing, ingestion status and session graph retrieval. See [the topology workflow](../TOPOLOGY_WORKFLOW.md); trace build/session IDs are optional.
+The schema now includes 19 paths, including name-based topology creation/read, version history/comparison, build listing, ingestion/session status and session graph retrieval. See [the topology workflow](../TOPOLOGY_WORKFLOW.md); trace build/session IDs are optional.
+
+The unresolved trace response fixture also contains per-flow `visibility_graph`
+nodes and unknown edges for missing endpoints and network segments. These are
+display placeholders, not inferred device inventory or proof of reachability.
 
 Use `--write` only when intentionally refreshing generated artifacts. The script validates the request models and all seven typed payload kinds, compares artifacts, and exercises real HTTP handlers with fake storage. It makes no external API or live database calls. HTTP client/ASGI libraries may use a local Windows socketpair. The HTTP client is a documentation-check dependency, not a new production requirement. Changes in installed FastAPI/Pydantic versions can affect generated schema; compare the deployed `/openapi.json` and pin your deployment dependencies.
 

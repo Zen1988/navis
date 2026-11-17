@@ -3,7 +3,7 @@ import hashlib
 import json
 
 
-def evidence_manifest(cur, dataset_id):
+def evidence_records(cur, dataset_id):
     # Canonical whole-row JSON preserves changes to values as well as membership.
     # A digest detects modification; it does not prove collection completeness.
     cur.execute("""SELECT ds.device_id::text, ds.data_type, ds.snapshot_id::text
@@ -48,5 +48,10 @@ def evidence_manifest(cur, dataset_id):
     for table, key in (("topology_link", "id::text"), ("topology_link_endpoint", "link_id::text || ':' || endpoint_number::text")):
         cur.execute(f"SELECT {key},row_to_json(t)::text FROM navis.{table} t ORDER BY 1")
         records.extend((table, *row) for row in cur.fetchall())
+    return selections, records
+
+
+def evidence_manifest(cur, dataset_id):
+    selections, records = evidence_records(cur, dataset_id)
     payload = json.dumps({"selections": selections, "records": records}, separators=(",", ":"), ensure_ascii=True)
     return {"algorithm": "sha256", "digest": hashlib.sha256(payload.encode()).hexdigest(), "version": 1}

@@ -1,5 +1,26 @@
 # Project status and continuation guide
 
+Current checks: 317 unit/API tests run, one database-dependent test skipped; generated contract checks cover nine request examples, three response fixtures and 19 API paths. The new SQL statements/migrations were also syntax-checked with a PostgreSQL parser. Docker/AGE deployment, backup restore and live retention remain unverified. Migration 021 adds collection expected/input/processed counts and failure diagnostics; see [ingestion progress](INGESTION_PROGRESS.md).
+
+Named topologies now have stable consumer/namespace-scoped names, server/IP member
+lists, version history and comparison. Unchanged network content retains its
+build/version IDs and `built_at` and advances `updated_at`. Migrations 019–020
+add version fingerprints, lifecycle clocks and shared audit storage. Normal
+queries stay live; explicit history reads can include audit. The operator
+retention runner uses 90-day inactivity eligibility and a one-year audit lifetime,
+with active/dependency protection. The image includes a backup/ledger-based
+upgrade toolkit. See [upgrading](UPGRADING.md), [topology workflow](TOPOLOGY_WORKFLOW.md)
+and [data lifecycle](DATA_LIFECYCLE.md). These new SQL/AGE/maintenance paths still
+require live deployment and restore validation.
+
+Trace visibility now follows available managed evidence toward destinations
+outside inventory and exposes unmanaged/missing segment placeholders in trace,
+topology and session graph responses. Unknown hop counts and unknown edges stay
+explicit; blocked/discarded paths do not imply missing devices. The suite ran
+270 tests with one database test skipped, and the regenerated trace response
+fixtures passed HTTP contract checks. Live PostgreSQL/AGE validation remains
+outstanding for the recent topology workflow changes.
+
 As of 2026-11-17, incremental namespace topology orchestration is implemented with migration 018: ingestion-triggered background normalization/build attempts, automatic latest snapshot selection, named IP-selected candidate views, optional trace build/session IDs, build listing and caller-owned session graph retrieval. See [the topology workflow](TOPOLOGY_WORKFLOW.md). The updated suite ran 260 tests with one database test skipped; OpenAPI/HTTP contract checks passed. These new workflow SQL/AGE paths still need live database validation. Background execution is best effort; a durable job queue, retention, complete workload resolution and full vendor semantics remain outstanding.
 
 Last updated: 2026-11-17. This is a development snapshot, not a production-readiness claim. The architecture and project charter describe intended behavior; this document records current implementation and known gaps. Older sections of other documents may lag the code.

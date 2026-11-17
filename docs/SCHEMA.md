@@ -1,5 +1,19 @@
 # PostgreSQL schema design
 
+Current additions: migration 018 stores frozen topology projections; 019 adds
+stable `topology_definition` names and `topology_version` content hashes,
+membership, build/recheck dates and counters; 020 adds ingestion/session update
+clocks, shared `audit_record` storage and the 90-day/one-year `retention_policy`.
+The upgrade toolkit maintains `schema_migration` with SQL checksums. See
+[upgrading](UPGRADING.md), [named topology workflow](TOPOLOGY_WORKFLOW.md), and
+[active/audit lifecycle](DATA_LIFECYCLE.md) for the implemented contracts and
+remaining live-database validation requirements.
+
+Migration 021 adds caller-owned collection IDs, expected/input/processed item
+counts, attempt clocks and persisted processing errors to ingestion receipts.
+See [ingestion progress](INGESTION_PROGRESS.md); accepted envelopes and successful
+normalization are separate outcomes.
+
 Status: Draft, conceptual v1. This document specifies the initial relational model; it is not a migration or a promise that every platform can be normalized yet. PostgreSQL is authoritative. Apache AGE is a rebuildable projection, and original submissions remain available for reprocessing.
 
 An initial draft SQL implementation is in [001_initial.sql](../migrations/001_initial.sql). It needs PostgreSQL integration testing and further constraints before production use. Migration 016 adds temporal identity overlap enforcement; its upgrade/database integration remains unverified. Remaining constraints include two complete link endpoints, cross-snapshot selector and zone consistency, normalization provenance for all object types, and rule-specific selector semantics need enforcement. JSON fields for flow selectors and NAT translations remain draft contracts. The migration does not implement adapter verification, graph construction, or analysis.

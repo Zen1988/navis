@@ -6,3 +6,6 @@ __pycache__/
 navis-secret.env
 .env.*
 !.env.example
+*.dump
+/backups/
+.test-tmp/

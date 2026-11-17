@@ -61,6 +61,30 @@
           "code": "DESTINATION_UNRESOLVED",
           "device_id": null,
           "message": "Destination device or interface information is missing."
+        },
+        {
+          "code": "ENDPOINT_VISIBILITY_MISSING",
+          "device_id": null,
+          "node_id": "unmanaged:713dd493-961d-5468-b01c-b04f3fa846d4",
+          "reason": "source_inventory_missing",
+          "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+          "unknown_hop_count": null
+        },
+        {
+          "code": "ENDPOINT_VISIBILITY_MISSING",
+          "device_id": null,
+          "node_id": "unmanaged:8e35a8f8-2af3-52aa-896d-0ab8c5ef126e",
+          "reason": "destination_inventory_missing",
+          "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+          "unknown_hop_count": null
+        },
+        {
+          "code": "UNMANAGED_PATH_SEGMENT",
+          "device_id": null,
+          "node_id": "unmanaged:aa1757e5-5a1e-57fa-99e4-ccb0f4390c64",
+          "reason": "destination_inventory_missing",
+          "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+          "unknown_hop_count": null
         }
       ],
       "reasons": [
@@ -97,6 +121,83 @@
           "policy": "unknown",
           "return_path": "unknown"
         }
+      },
+      "visibility_graph": {
+        "nodes": [
+          {
+            "id": "unmanaged:713dd493-961d-5468-b01c-b04f3fa846d4",
+            "type": "unmanaged",
+            "name": "Unmanaged / unresolved source",
+            "device_id": null,
+            "placeholder": true,
+            "management_status": "unknown",
+            "evidence_status": "unverified",
+            "evidence_label": "Unverified / missing evidence",
+            "verification_scope": null,
+            "trace_status": "not_traced",
+            "role": "source",
+            "addresses": [
+              "192.0.2.10"
+            ],
+            "reason": "source_inventory_missing",
+            "unknown_hop_count": null,
+            "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+            "candidate_device_ids": []
+          },
+          {
+            "id": "unmanaged:8e35a8f8-2af3-52aa-896d-0ab8c5ef126e",
+            "type": "unmanaged",
+            "name": "Unmanaged / unresolved destination",
+            "device_id": null,
+            "placeholder": true,
+            "management_status": "unknown",
+            "evidence_status": "unverified",
+            "evidence_label": "Unverified / missing evidence",
+            "verification_scope": null,
+            "trace_status": "not_traced",
+            "role": "destination",
+            "addresses": [
+              "198.51.100.5"
+            ],
+            "reason": "destination_inventory_missing",
+            "unknown_hop_count": null,
+            "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+            "candidate_device_ids": []
+          },
+          {
+            "id": "unmanaged:aa1757e5-5a1e-57fa-99e4-ccb0f4390c64",
+            "type": "unmanaged",
+            "name": "Unmanaged / missing network",
+            "device_id": null,
+            "placeholder": true,
+            "management_status": "unknown",
+            "evidence_status": "unverified",
+            "evidence_label": "Unverified / missing evidence",
+            "verification_scope": null,
+            "trace_status": "not_traced",
+            "role": "segment",
+            "addresses": [],
+            "reason": "destination_inventory_missing",
+            "unknown_hop_count": null,
+            "message": "Navis has insufficient inventory or path evidence to trace this part of the network."
+          }
+        ],
+        "connections": [
+          {
+            "source": "unmanaged:713dd493-961d-5468-b01c-b04f3fa846d4",
+            "target": "unmanaged:aa1757e5-5a1e-57fa-99e4-ccb0f4390c64",
+            "kind": "visibility_gap",
+            "status": "unknown"
+          },
+          {
+            "source": "unmanaged:aa1757e5-5a1e-57fa-99e4-ccb0f4390c64",
+            "target": "unmanaged:8e35a8f8-2af3-52aa-896d-0ab8c5ef126e",
+            "kind": "untraced_remainder",
+            "status": "unknown"
+          }
+        ],
+        "status": "incomplete",
+        "semantics": "Visibility only; unknown edges do not establish forwarding or reachability."
       }
     },
     {
@@ -156,6 +257,30 @@
           "code": "DESTINATION_UNRESOLVED",
           "device_id": null,
           "message": "Destination device or interface information is missing."
+        },
+        {
+          "code": "ENDPOINT_VISIBILITY_MISSING",
+          "device_id": null,
+          "node_id": "unmanaged:106927b5-4d95-52bb-a163-3b3128009896",
+          "reason": "source_inventory_missing",
+          "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+          "unknown_hop_count": null
+        },
+        {
+          "code": "ENDPOINT_VISIBILITY_MISSING",
+          "device_id": null,
+          "node_id": "unmanaged:1fc65de0-9df8-5e5e-b983-ad6927d8fee2",
+          "reason": "destination_inventory_missing",
+          "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+          "unknown_hop_count": null
+        },
+        {
+          "code": "UNMANAGED_PATH_SEGMENT",
+          "device_id": null,
+          "node_id": "unmanaged:bd8db429-74ca-5b5f-bd43-4cca56fca23a",
+          "reason": "destination_inventory_missing",
+          "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+          "unknown_hop_count": null
         }
       ],
       "reasons": [
@@ -192,6 +317,83 @@
           "policy": "unknown",
           "return_path": "unknown"
         }
+      },
+      "visibility_graph": {
+        "nodes": [
+          {
+            "id": "unmanaged:106927b5-4d95-52bb-a163-3b3128009896",
+            "type": "unmanaged",
+            "name": "Unmanaged / unresolved source",
+            "device_id": null,
+            "placeholder": true,
+            "management_status": "unknown",
+            "evidence_status": "unverified",
+            "evidence_label": "Unverified / missing evidence",
+            "verification_scope": null,
+            "trace_status": "not_traced",
+            "role": "source",
+            "addresses": [
+              "192.0.2.11"
+            ],
+            "reason": "source_inventory_missing",
+            "unknown_hop_count": null,
+            "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+            "candidate_device_ids": []
+          },
+          {
+            "id": "unmanaged:1fc65de0-9df8-5e5e-b983-ad6927d8fee2",
+            "type": "unmanaged",
+            "name": "Unmanaged / unresolved destination",
+            "device_id": null,
+            "placeholder": true,
+            "management_status": "unknown",
+            "evidence_status": "unverified",
+            "evidence_label": "Unverified / missing evidence",
+            "verification_scope": null,
+            "trace_status": "not_traced",
+            "role": "destination",
+            "addresses": [
+              "198.51.100.5"
+            ],
+            "reason": "destination_inventory_missing",
+            "unknown_hop_count": null,
+            "message": "Navis has insufficient inventory or path evidence to trace this part of the network.",
+            "candidate_device_ids": []
+          },
+          {
+            "id": "unmanaged:bd8db429-74ca-5b5f-bd43-4cca56fca23a",
+            "type": "unmanaged",
+            "name": "Unmanaged / missing network",
+            "device_id": null,
+            "placeholder": true,
+            "management_status": "unknown",
+            "evidence_status": "unverified",
+            "evidence_label": "Unverified / missing evidence",
+            "verification_scope": null,
+            "trace_status": "not_traced",
+            "role": "segment",
+            "addresses": [],
+            "reason": "destination_inventory_missing",
+            "unknown_hop_count": null,
+            "message": "Navis has insufficient inventory or path evidence to trace this part of the network."
+          }
+        ],
+        "connections": [
+          {
+            "source": "unmanaged:106927b5-4d95-52bb-a163-3b3128009896",
+            "target": "unmanaged:bd8db429-74ca-5b5f-bd43-4cca56fca23a",
+            "kind": "visibility_gap",
+            "status": "unknown"
+          },
+          {
+            "source": "unmanaged:bd8db429-74ca-5b5f-bd43-4cca56fca23a",
+            "target": "unmanaged:1fc65de0-9df8-5e5e-b983-ad6927d8fee2",
+            "kind": "untraced_remainder",
+            "status": "unknown"
+          }
+        ],
+        "status": "incomplete",
+        "semantics": "Visibility only; unknown edges do not establish forwarding or reachability."
       }
     }
   ]

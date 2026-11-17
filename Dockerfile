@@ -1,6 +1,6 @@
 FROM docker.io/library/ubuntu:26.04
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates python3 python3-venv \
+    && apt-get install -y --no-install-recommends ca-certificates python3 python3-venv postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv
 WORKDIR /app

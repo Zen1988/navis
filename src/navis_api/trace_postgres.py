@@ -67,11 +67,14 @@ class PostgresTraceProcessor:
                     hops = []
                     current = source[0]["device_id"] if len(source) == 1 else None
                     target = destination[0]["device_id"] if len(destination) == 1 else None
+                    destination_ambiguous = len(destination) > 1
                     visited = set()
                     packet = Packet(flow.source, flow.destination, flow.protocol, flow.destination_port, getattr(request, "source_port", None))
                     ingress = None
                     vrf = source[0]["vrf"] if current else None
-                    while current and target and current not in visited and len(hops) < 64:
+                    # Follow known evidence toward an external/unmanaged address
+                    # even when its destination is absent from inventory.
+                    while current and not destination_ambiguous and current not in visited and len(hops) < 64:
                         visited.add(current)
                         cur.execute("SELECT display_name,platform FROM navis.device WHERE id=%s", (current,))
                         device = cur.fetchone()
@@ -97,7 +100,8 @@ class PostgresTraceProcessor:
                             translated = self._endpoints(cur, dataset, request.graph_build_id, packet.destination)
                             hop["translated_destination_candidates"] = translated
                             target = translated[0]["device_id"] if len(translated) == 1 else None
-                            if target is None:
+                            destination_ambiguous = len(translated) > 1
+                            if destination_ambiguous:
                                 hop["stop_reason"] = "translated destination is missing or ambiguous"
                                 break
                         if current == target:
@@ -156,6 +160,7 @@ class PostgresTraceProcessor:
                             hop["connection_evidence"] = "unverified_next_hop_candidate"
                         if len(next_devices) != 1:
                             hop["stop_reason"] = "Next device connection is missing or ambiguous"
+                            hop["visibility_stop"] = "next_device_missing" if not next_devices else "next_device_ambiguous"
                             break
                         peers = peer_interfaces(cur, graph, graph_route_id, next_devices[0])
                         ingress = None
@@ -338,7 +343,8 @@ class PostgresTraceProcessor:
             result["connection_verdict"] = connection_verdict(forwarding=forwarding, nat=nat, policy=policy,
                                                                return_path=return_path, alternatives_complete=alternatives_complete,
                                                                all_paths_blocked=all_blocked)
-        return response
+        from navis_common.path_visibility import add_visibility
+        return add_visibility(response)
 
     @staticmethod
     def _candidate_paths(cur, dataset, build_id, graph, source, destination, flow, *, reverse_transitions=None, source_port=None):

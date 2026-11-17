@@ -45,6 +45,12 @@ def configure_test_services():
         from .trace_session import PostgresTraceSessions
         from .graph_response import get_graph
         factory = lambda: psycopg.connect(dsn)
+        with factory() as conn, conn.cursor() as cur:
+            cur.execute("""SELECT to_regclass('navis.topology_version'),to_regclass('navis.audit_record'),
+                (SELECT column_name FROM information_schema.columns WHERE table_schema='navis'
+                 AND table_name='ingestion_submission' AND column_name='processing_error')""")
+            if any(value is None for value in cur.fetchone()):
+                raise RuntimeError("Apply Navis migrations through 021 before starting this API; use python -m navis_api.migrate plan")
         app.state.ingestion_processor = PostgresIngestionProcessor(factory)
         app.state.trace_processor = PostgresTraceProcessor(factory)
         app.state.trace_sessions = PostgresTraceSessions(factory)
@@ -171,28 +177,52 @@ def trace_path(submission: TraceRequest, request: Request,
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     try:
+        selected_topology = None
         if submission.graph_build_id is None:
             service = request.app.state.topology_service
             if service is None:
                 raise HTTPException(status_code=503, detail="Topology preparation is not configured")
             from uuid import UUID
-            prepared = service.refresh(principal, submission.namespace)
-            submission = submission.model_copy(update={"graph_build_id": UUID(prepared["graph_build_id"])})
+            if submission.topology_version_id:
+                prepared = service.read_named(principal, submission.topology_name, submission.namespace,
+                                               permission="analysis:run", version_id=submission.topology_version_id)
+                if prepared.get("lifecycle", {}).get("storage_status") == "audit":
+                    raise HTTPException(status_code=409, detail="Archived versions support inspection and comparison; restore to live storage before tracing")
+            elif submission.topology_name:
+                prepared = service.refresh(principal, submission.namespace, name=submission.topology_name)
+            else:
+                prepared = service.refresh(principal, submission.namespace)
+            selected_topology = {"name": prepared.get("name", "default"), "namespace": prepared.get("namespace", submission.namespace), "members": prepared.get("members", [])}
+            for key in ("version_id", "built_at", "updated_at", "check_count", "changed"):
+                if key in prepared:
+                    value = prepared[key]
+                    selected_topology[key] = value.isoformat() if hasattr(value, "isoformat") else value
+            # Keep a reproducible resolved build; name is stored in result metadata
+            # so the saved request still obeys the one-selector request contract.
+            submission = submission.model_copy(update={"graph_build_id": UUID(prepared["graph_build_id"]), "topology_name": None, "topology_version_id": None})
         elif request.app.state.topology_service is not None:
             # Enforce ownership for named topology builds as well as trace source scope.
             try:
                 request.app.state.topology_service.read(principal, submission.graph_build_id, permission="analysis:run")
             except LookupError:
                 pass  # Legacy operator-created builds retain their existing checks.
-        result = request.app.state.trace_processor.trace(submission, flows, principal)
-        if request.app.state.trace_sessions is None:
-            raise HTTPException(status_code=503, detail="Trace session storage is not configured")
-        session_id = request.app.state.trace_sessions.save(principal, submission.caller_session_id, submission.graph_build_id, submission.model_dump(mode="json"), result)
-        return {**result, "graph_build_id": str(submission.graph_build_id), "code": "TRACE_RESULT_READY", "caller_session_id": submission.caller_session_id, "trace_session_id": str(session_id)}
+        from contextlib import nullcontext
+        service = request.app.state.topology_service
+        lease = service.trace_lease(submission.graph_build_id) if service is not None else nullcontext()
+        with lease:
+            result = request.app.state.trace_processor.trace(submission, flows, principal)
+            if selected_topology is not None:
+                result["topology"] = selected_topology
+            if request.app.state.trace_sessions is None:
+                raise HTTPException(status_code=503, detail="Trace session storage is not configured")
+            session_id = request.app.state.trace_sessions.save(principal, submission.caller_session_id, submission.graph_build_id, submission.model_dump(mode="json"), result)
+            return {**result, "graph_build_id": str(submission.graph_build_id), "code": "TRACE_RESULT_READY", "caller_session_id": submission.caller_session_id, "trace_session_id": str(session_id)}
     except PermissionError:
         raise HTTPException(status_code=403, detail="Dataset access denied")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Topology name not found")
     except NotImplementedError:
         raise HTTPException(status_code=503, detail="Trace analysis is not configured")
 
@@ -207,9 +237,84 @@ def topology_service(request):
 def prepare_topology(submission: TopologyRequest, request: Request,
                      principal: Principal = Depends(require_scope("analysis:run"))):
     try:
-        return topology_service(request).refresh(principal, submission.namespace, name=submission.name, ips=submission.ips)
+        return topology_service(request).refresh(principal, submission.namespace, name=submission.name, ips=submission.ips, members=submission.members)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Namespace access denied")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Topology name not found; create it with members first")
+
+
+@app.get("/v1/topologies")
+def list_topologies(request: Request, namespace: str | None = None, limit: int = Query(default=50, ge=1, le=200),
+                    principal: Principal = Depends(require_scope("graph:read"))):
+    try:
+        return topology_service(request).list_topologies(principal, namespace, limit)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Consumer access denied")
+
+
+@app.get("/v1/topologies/by-name/{name}")
+def read_topology_by_name(name: str, request: Request, namespace: str | None = None, version_id: str | None = None,
+                          principal: Principal = Depends(require_scope("graph:read"))):
+    try:
+        if version_id is not None:
+            from uuid import UUID
+            return topology_service(request).read_named(principal, name, namespace, version_id=UUID(version_id))
+        return topology_service(request).read_named(principal, name, namespace)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Topology access denied")
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Topology name not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/v1/topologies/by-name/{name}/versions")
+def topology_versions(name: str, request: Request, namespace: str | None = None,
+                       limit: int = Query(default=50, ge=1, le=200),
+                       include_audit: bool = False,
+                       principal: Principal = Depends(require_scope("graph:read"))):
+    try:
+        return topology_service(request).versions(principal, name, namespace, limit, include_audit=include_audit)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Topology access denied")
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Topology name not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/v1/topologies/by-name/{name}/compare")
+def compare_topology_versions(name: str, request: Request, from_version: str,
+                              to_version: str | None = None, namespace: str | None = None,
+                              principal: Principal = Depends(require_scope("graph:read"))):
+    from uuid import UUID
+    try:
+        first, second = UUID(from_version), UUID(to_version) if to_version else None
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid topology version ID")
+    try:
+        return topology_service(request).compare(principal, name, first, second, namespace)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Topology access denied")
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Topology version not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.post("/v1/topologies/by-name/{name}/refresh")
+def refresh_topology_by_name(name: str, request: Request, namespace: str | None = None,
+                             principal: Principal = Depends(require_scope("analysis:run"))):
+    try:
+        validated = TopologyRequest(name=name, namespace=namespace)
+        return topology_service(request).refresh(principal, validated.namespace, name=validated.name)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Topology access denied")
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Topology name not found")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
@@ -237,6 +342,18 @@ def ingestion_status(ingestion_id: str, request: Request,
         raise HTTPException(status_code=403, detail="Consumer access denied")
     except LookupError:
         raise HTTPException(status_code=404, detail="Ingestion not found or inaccessible")
+
+
+@app.get("/v1/ingestions/collections/{collection_run_id:path}")
+def ingestion_collection_progress(collection_run_id: str, request: Request, namespace: str | None = None,
+                                   limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
+                                   principal: Principal = Depends(require_scope("inventory:write"))):
+    try:
+        return topology_service(request).collection_progress(principal, collection_run_id, namespace, limit, offset)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Consumer access denied")
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Collection not found in caller scope")
 
 
 @app.get("/v1/topologies/{build_id}")
@@ -272,14 +389,43 @@ def session_graph(caller_session_id: str, request: Request,
         traced = {h["device_id"] for result in session["result"].get("results", [])
                   for h in result.get("hops", []) if h.get("device_id")}
         selected = traced | {node["id"] for node in graph["nodes"]}
-        graph["nodes"] = [node for node in full_graph["nodes"] if node["id"] in selected]
-        graph["connections"] = [edge for edge in full_graph["connections"]
-                                if edge["source"] in selected and edge["target"] in selected]
+        visibility = [result["visibility_graph"] for result in session["result"].get("results", [])
+                      if result.get("visibility_graph")]
+        nodes = {node["id"]: node for node in full_graph["nodes"]
+                 if node["id"] in selected and (not visibility or not node.get("placeholder"))}
+        if not visibility:
+            nodes.update({node["id"]: node for node in graph["nodes"]})
+        for flow_graph in visibility:
+            for node in flow_graph["nodes"]:
+                # Retain collected addresses and names on managed inventory nodes.
+                nodes[node["id"]] = {**node, **nodes.get(node["id"], {})}
+        edges = [edge for edge in full_graph["connections"]
+                 if edge["source"] in nodes and edge["target"] in nodes]
+        for flow_graph in visibility:
+            for edge in flow_graph["connections"]:
+                if edge not in edges:
+                    edges.append(edge)
+        graph["nodes"], graph["connections"] = list(nodes.values()), edges
+        if visibility:
+            graph["visibility_status"] = "incomplete" if any(g["status"] == "incomplete" for g in visibility) else "candidate_path"
         return {**session, "graph": graph}
     except PermissionError:
         raise HTTPException(status_code=403, detail="Session or source access denied")
     except LookupError:
         raise HTTPException(status_code=404, detail="Session graph not found or expired")
+
+
+@app.get("/v1/trace-sessions")
+def list_trace_sessions(request: Request, active_only: bool = True,
+                        include_audit: bool = False,
+                        limit: int = Query(default=50, ge=1, le=200),
+                        principal: Principal = Depends(require_scope("analysis:read"))):
+    if request.app.state.trace_sessions is None:
+        raise HTTPException(status_code=503, detail="Session storage is not configured")
+    try:
+        return request.app.state.trace_sessions.list(principal, active_only=active_only, include_audit=include_audit, limit=limit)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Consumer access denied")
 
 
 @app.get("/v1/trace-sessions/{caller_session_id}/recommendations")

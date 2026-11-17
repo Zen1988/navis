@@ -40,13 +40,39 @@ class PostgresTraceSessions:
     def get(self, principal, caller_session_id):
         with self.connection_factory() as conn, conn.cursor() as cur:
             consumer = self._consumer(cur, principal)
-            cur.execute("""SELECT id,graph_build_id,request,result FROM navis.trace_session
+            cur.execute("""SELECT id,graph_build_id,request,result,updated_at,expires_at FROM navis.trace_session
                 WHERE consumer_id=%s AND caller_session_id=%s AND expires_at>now()""", (consumer, caller_session_id))
             row = cur.fetchone()
             if row is None:
                 raise LookupError("session not found or expired")
+            from navis_common.lifecycle import lifecycle
             return {"trace_session_id": str(row[0]), "caller_session_id": caller_session_id,
-                    "graph_build_id": str(row[1]), "request": row[2], "result": row[3]}
+                    "graph_build_id": str(row[1]), "request": row[2], "result": row[3],
+                    "updated_at": row[4], "expires_at": row[5],
+                    "lifecycle": lifecycle(row[4], active=True, expires_at=row[5])}
+
+    def list(self, principal, *, active_only=True, include_audit=False, limit=50):
+        from navis_common.lifecycle import lifecycle
+        with self.connection_factory() as conn, conn.cursor() as cur:
+            consumer = self._consumer(cur, principal)
+            cur.execute("""SELECT id,caller_session_id,graph_build_id,created_at,updated_at,expires_at
+                FROM navis.trace_session WHERE consumer_id=%s AND (NOT %s OR expires_at>now())
+                ORDER BY updated_at DESC,id LIMIT %s""", (consumer, active_only, limit))
+            sessions = [{"trace_session_id": str(i), "caller_session_id": caller,
+                "graph_build_id": str(build), "created_at": created, "updated_at": updated, "expires_at": expires,
+                "lifecycle": lifecycle(updated, active=True, expires_at=expires)}
+                for i,caller,build,created,updated,expires in cur.fetchall()]
+            if include_audit and not active_only:
+                cur.execute("""SELECT row_data,archived_at FROM navis.audit_record
+                    WHERE source_table='trace_session' AND consumer_id=%s
+                    ORDER BY source_updated_at DESC LIMIT %s""", (consumer, limit))
+                for row, archived in cur.fetchall():
+                    sessions.append({"trace_session_id": row['id'], "caller_session_id": row['caller_session_id'],
+                        "graph_build_id": row['graph_build_id'], "created_at": row['created_at'], "updated_at": row['updated_at'],
+                        "expires_at": row['expires_at'], "lifecycle": lifecycle(row['updated_at'], active=False, expires_at=row['expires_at'], archived_at=archived)})
+            from navis_common.lifecycle import as_datetime
+            sessions.sort(key=lambda s: (as_datetime(s['updated_at']), s['trace_session_id']), reverse=True)
+            return {"sessions": sessions[:limit]}
 
     def recommendations(self, principal, caller_session_id):
         with self.connection_factory() as conn:

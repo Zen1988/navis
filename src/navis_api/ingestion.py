@@ -5,7 +5,7 @@ from typing import Any, Literal, Protocol
 from uuid import UUID
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from navis_common.auth import Principal
 
 
@@ -44,6 +44,22 @@ class Ingestion(BaseModel):
     collected_at: datetime
     completeness: Literal["complete", "partial", "unknown"]
     payload: dict[str, Any]
+    collection_run_id: str | None = Field(default=None, min_length=1, max_length=255)
+    expected_submissions: int | None = Field(default=None, ge=1, le=1000000, strict=True)
+    expected_items: int | None = Field(default=None, ge=0, le=1000000000, strict=True)
+
+    @field_validator("collection_run_id")
+    @classmethod
+    def collection_nonblank(cls, value):
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise ValueError("collection_run_id must be nonblank without surrounding whitespace")
+        return value
+
+    @model_validator(mode="after")
+    def expected_collection(self):
+        if (self.expected_submissions is not None or self.expected_items is not None) and self.collection_run_id is None:
+            raise ValueError("expected totals require collection_run_id")
+        return self
 
     @field_validator("collected_at")
     @classmethod
@@ -82,7 +98,7 @@ class PostgresIngestionProcessor:
         with self.connection_factory() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    """SELECT s.id FROM navis.source_system s
+                    """SELECT s.id,c.id FROM navis.source_system s
                        JOIN navis.consumer_data_scope ds ON ds.source_system_id = s.id
                        JOIN navis.api_consumer c ON c.id = ds.api_consumer_id
                        WHERE s.namespace = %s AND c.issuer = %s AND c.subject_or_client_id = %s
@@ -99,11 +115,16 @@ class PostgresIngestionProcessor:
                     """INSERT INTO navis.ingestion_submission
                        (id, source_system_id, external_device_id, object_class, claimed_device_id,
                         adapter_name, input_format, format_version, data_type, collected_at,
-                        completeness, payload, submitted_by, status)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_identity')""",
+                        completeness, payload, submitted_by,submitted_consumer_id,collection_run_id,
+                        expected_submissions,expected_items,input_items,status)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_identity')""",
                     (submission_id, source[0], submission.source.external_device_id, submission.source.object_class, claimed_id,
                      submission.adapter.name, submission.adapter.input_format, submission.adapter.format_version,
                      submission.data_type, submission.collected_at, submission.completeness,
-                     Jsonb(submission.payload), principal.subject),
+                     Jsonb(submission.payload), principal.subject, source[1], submission.collection_run_id,
+                     submission.expected_submissions, submission.expected_items,
+                     len(submission.payload['entries']) if isinstance(submission.payload.get('entries'), list) else None),
                 )
-        return {"ingestion_id": str(submission_id), "status": "pending_identity"}
+        return {"ingestion_id": str(submission_id), "status": "pending_identity",
+                "collection_run_id": submission.collection_run_id,
+                "input_items": len(submission.payload['entries']) if isinstance(submission.payload.get('entries'), list) else None}

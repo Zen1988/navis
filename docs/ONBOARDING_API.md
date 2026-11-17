@@ -212,11 +212,11 @@ requires replacement and revocation; client secrets do not expire automatically.
 ## 7. Complete the data integration
 
 Successful authentication alone does not prepare inventory. Agree with the
-operator on device mappings, adapter approval, migrations through 018 and
+operator on device mappings, adapter approval, migrations through 021 and
 supported evidence limitations. Ingestion then attempts normalization and a
 namespace build automatically. Use `POST /v1/topologies` for an explicit refresh
-or named IP-selected view, `GET /v1/graph-builds` to list accessible builds, and
-`POST /v1/traces` with an optional build ID. Omit the caller session ID to generate
+or named server/IP-selected view, `GET /v1/topologies` to list names and latest versions, and
+`POST /v1/traces` with a topology name and optional historical version, or an optional explicit build ID. Omit the caller session ID to generate
 one; retrieve the saved graph/result through
 `GET /v1/trace-sessions/{caller_session_id}/graph` with `analysis:read` and current
 database analysis permission. See [the topology workflow](TOPOLOGY_WORKFLOW.md).

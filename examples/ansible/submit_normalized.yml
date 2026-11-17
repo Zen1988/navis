@@ -25,6 +25,9 @@
           Authorization: "Bearer {{ navis_token }}"
         body_format: json
         body:
+          collection_run_id: "{{ navis_collection_run_id | default('example-' ~ navis_collected_at) }}"
+          expected_submissions: 1
+          expected_items: "{{ normalized_interfaces.entries | length }}"
           source:
             namespace: "{{ navis_source_namespace }}"
             external_device_id: "{{ navis_external_device_id }}"
@@ -44,3 +47,36 @@
     - name: Show ingestion identifier and state
       ansible.builtin.debug:
         msg: "Ingestion {{ navis_submission.json.ingestion_id }}: {{ navis_submission.json.status }}"
+
+    - name: Poll normalization outcome instead of treating 202 as success
+      ansible.builtin.uri:
+        url: "{{ navis_url }}/v1/ingestions/{{ navis_submission.json.ingestion_id }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ navis_token }}"
+        status_code: 200
+        validate_certs: true
+      register: navis_outcome
+      until: navis_outcome.json.status in ['processed', 'raw_only'] or navis_outcome.json.processing_error is not none
+      retries: 12
+      delay: 5
+      no_log: true
+
+    - name: Show safe processing summary
+      ansible.builtin.debug:
+        msg:
+          state: "{{ navis_outcome.json.processing_state }}"
+          input_items: "{{ navis_outcome.json.input_items }}"
+          processed_items: "{{ navis_outcome.json.processed_items }}"
+          snapshot_id: "{{ navis_outcome.json.snapshot_id }}"
+          validation: "{{ navis_outcome.json.validation }}"
+          quality: "{{ navis_outcome.json.quality }}"
+          processing_error: "{{ navis_outcome.json.processing_error }}"
+
+    - name: Require successful typed normalization for this interface example
+      ansible.builtin.assert:
+        that:
+          - navis_outcome.json.status == 'processed'
+          - navis_outcome.json.processing_error is none
+          - navis_outcome.json.processed_items == navis_outcome.json.input_items
+        fail_msg: "Normalization did not succeed; inspect the processing summary. A 202 receipt is not sufficient."
