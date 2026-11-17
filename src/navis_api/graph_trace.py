@@ -3,6 +3,11 @@ import re
 from uuid import UUID
 
 
+class NextDevices(list):
+    """List-compatible result retaining whether inferred evidence was used."""
+    inferred = False
+
+
 def _uuid(value):
     return str(UUID(str(value)))
 
@@ -23,7 +28,10 @@ def next_hops(cur, graph, route_id):
         rows.extend(_query(cur, graph, f"""MATCH (r:Route {{id: '{route_id}'}})-[:OUTGOING_INTERFACE]->(out:Interface),
             (out)-[:{link_type}]-(peer:Interface)<-[:HAS_INTERFACE]-(device:Device)
             RETURN device.id"""))
-    return sorted({str(UUID(json.loads(str(row[0])))) for row in rows})
+    inferred = _query(cur, graph, f"""MATCH (r:Route {{id: '{route_id}'}})-[candidate]->(peer:Interface)<-[:HAS_INTERFACE]-(device:Device) WHERE type(candidate)='NEXT_HOP_CANDIDATE' RETURN device.id""")
+    result = NextDevices(sorted({str(UUID(json.loads(str(row[0])))) for row in rows + inferred}))
+    result.inferred = bool(inferred)
+    return result
 
 
 def peer_interfaces(cur, graph, route_id, device_id):
@@ -35,4 +43,5 @@ def peer_interfaces(cur, graph, route_id, device_id):
         rows.extend(_query(cur, graph, f"""MATCH (r:Route {{id: '{route_id}'}})-[:OUTGOING_INTERFACE]->(out:Interface),
             (out)-[:{link_type}]-(peer:Interface)<-[:HAS_INTERFACE]-(device:Device {{id: '{device_id}'}})
             RETURN peer.id"""))
+    rows.extend(_query(cur, graph, f"""MATCH (r:Route {{id: '{route_id}'}})-[candidate]->(peer:Interface)<-[:HAS_INTERFACE]-(device:Device {{id: '{device_id}'}}) WHERE type(candidate)='NEXT_HOP_CANDIDATE' RETURN peer.id"""))
     return sorted({str(UUID(json.loads(str(row[0])))) for row in rows})

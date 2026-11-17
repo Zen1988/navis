@@ -69,6 +69,37 @@ def build_graph(connection_factory, dataset_id):
                     left, right = interface_ids[left], interface_ids[right]
                     relationship = "MANUAL_LINK" if origin == "manual" else "DISCOVERED_LINK"
                     _cypher(cur, graph, f"MATCH (a:Interface {{id: '{left}'}}), (b:Interface {{id: '{right}'}}) CREATE (a)-[:{relationship} {{source_id: '{link}'}}]->(b)")
+            # A next-hop IP is route-specific evidence, not a physical link.
+            # Only match selected interface snapshots in the same source; do not
+            # choose among reused addresses or bridge routing-context boundaries.
+            cur.execute("""SELECT r.id,n.id,peer.id,ps.device_id,local.native_id,remote.native_id,
+                    b.source_system_id,pb.source_system_id
+                FROM navis.graph_dataset_snapshot ds
+                JOIN navis.device_snapshot s ON s.id=ds.snapshot_id
+                JOIN navis.import_batch b ON b.id=s.import_batch_id
+                JOIN navis.route r ON r.snapshot_id=s.id
+                JOIN navis.routing_context local ON local.id=r.routing_context_id
+                JOIN navis.route_next_hop n ON n.route_id=r.id
+                JOIN navis.interface_address a ON host(a.address)=host(n.next_hop_address)
+                JOIN navis.interface peer ON peer.id=a.interface_id
+                JOIN navis.routing_context remote ON remote.id=peer.routing_context_id
+                JOIN navis.device_snapshot ps ON ps.id=peer.snapshot_id
+                JOIN navis.import_batch pb ON pb.id=ps.import_batch_id
+                JOIN navis.graph_dataset_snapshot pds ON pds.snapshot_id=ps.id
+                    AND pds.dataset_id=ds.dataset_id AND pds.data_type='interface'
+                WHERE ds.dataset_id=%s AND ds.data_type='route' AND ps.device_id<>s.device_id
+                AND n.next_hop_context_id IS NULL""", (dataset_id,))
+            candidates = {}
+            for route, hop, peer, device, local, remote, source, peer_source in cur.fetchall():
+                if local == remote and source == peer_source:
+                    candidates.setdefault((route, hop), set()).add((_uuid(peer), _uuid(device)))
+            for (route, hop), peers in candidates.items():
+                if len(peers) != 1:
+                    continue
+                peer, _ = next(iter(peers))
+                if peer in interface_ids:
+                    canonical_peer = interface_ids[peer]
+                    _cypher(cur, graph, f"MATCH (r:Route {{id: '{_uuid(route)}'}}), (i:Interface {{id: '{canonical_peer}'}}) CREATE (r)-[:NEXT_HOP_CANDIDATE {{source_id: '{_uuid(hop)}'}}]->(i)")
             from psycopg.types.json import Jsonb
             manifest = evidence_manifest(cur, dataset_id)
             cur.execute("UPDATE navis.graph_build SET status='completed',completed_at=now(),evidence_manifest=%s WHERE id=%s", (Jsonb(manifest), build_id))

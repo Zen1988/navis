@@ -122,7 +122,9 @@ podman run --rm --entrypoint cat navis:local /etc/os-release
 ```
 
 The image runs as UID 10001 on port 8000 and includes the API, web console,
-registration CLI and migrations. It does not automatically start workers.
+registration CLI and migrations. With migration 018, ingestion triggers a
+best-effort background normalization and namespace topology build. This does not
+start a separate durable worker service.
 
 ## 3. Run a local lab
 
@@ -194,6 +196,8 @@ docker run --rm --env-file .env.operator navis:local python -m navis_api.registr
 
 Use separate privileged operator and runtime database credentials. All replicas
 must share the initialized database. Never capture client secrets in CI logs.
-Collectors, identity mappings, workers, dataset approval and graph building remain
-separate operations. See [integration](INTEGRATION_API.md), [graph setup](GRAPH.md)
+Collectors, identity mappings and adapter approval remain prerequisites. The API
+now selects datasets and attempts graph builds after ingestion; explicit refresh,
+named topology and on-demand traces are described in the
+[topology workflow](TOPOLOGY_WORKFLOW.md). See [integration](INTEGRATION_API.md), [graph setup](GRAPH.md)
 and [project status](STATUS.md) for supported behavior and limitations.

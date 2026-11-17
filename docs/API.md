@@ -11,11 +11,12 @@ The current consumer reference is the [API integration guide](INTEGRATION_API.md
 
 Companion artifacts:
 
+- [Incremental topology and on-demand trace workflow](TOPOLOGY_WORKFLOW.md)
 - [Generated OpenAPI snapshot](api/openapi.json)
 - [Complete request examples](api/examples/)
 - [Contract verification script and instructions](api/README.md)
 - [Implementation status and remaining work](STATUS.md)
 
-The guide supersedes the earlier API foundation notes. Ingestion acceptance is staging, normalization/build preparation remains a separate operational step, and candidate evidence must not be treated as confirmed end-to-end connectivity. See the guide for exact implemented behavior and deployment prerequisites.
+The guide supersedes the earlier API foundation notes. Ingestion acceptance is staging, normalization and namespace build preparation are attempted automatically after ingestion and can be retried through the topology API, and candidate evidence must not be treated as confirmed end-to-end connectivity. See the guide for exact implemented behavior and deployment prerequisites.
 
 External device identities use source namespace, object class and opaque ID. Registered consumer identity and source authorization are separate. See the [external identity contract](INTEGRATION_API.md#external-device-identity-and-registered-clients) for CMDB examples, caller configuration and migration 016.

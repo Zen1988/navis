@@ -152,6 +152,8 @@ class PostgresTraceProcessor:
                             hop["stop_reason"] = "policy denied traffic"
                             break
                         next_devices = next_hops(cur, graph, graph_route_id)
+                        if getattr(next_devices, "inferred", False):
+                            hop["connection_evidence"] = "unverified_next_hop_candidate"
                         if len(next_devices) != 1:
                             hop["stop_reason"] = "Next device connection is missing or ambiguous"
                             break
@@ -206,6 +208,8 @@ class PostgresTraceProcessor:
                     coverage["destination_reached"] = reached
                     coverage["relational_evidence_unchanged"] = evidence_unchanged
                     coverage["forwarding"] = forwarding_coverage(hops, coverage["devices"], destination_reached=reached, evidence_unchanged=evidence_unchanged)
+                    if any(h.get("connection_evidence") == "unverified_next_hop_candidate" for h in hops):
+                        coverage["forwarding"]["complete"] = False
                     coverage["forwarding_semantics_verified"] = coverage["forwarding"]["complete"]
                     # Final coverage is assembled after reverse analysis.
                     coverage["complete"] = False
@@ -366,7 +370,10 @@ class PostgresTraceProcessor:
                 unresolved_edge = False
                 for edge in edge_routes:
                   edge_count = len(route["next_states"])
-                  for device in next_hops(cur, graph, edge["route_id"]):
+                  devices = next_hops(cur, graph, edge["route_id"])
+                  if getattr(devices, "inferred", False):
+                      complete = False
+                  for device in devices:
                     peers = peer_interfaces(cur, graph, edge["route_id"], device)
                     if len(peers) != 1:
                         continue

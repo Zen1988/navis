@@ -1,14 +1,15 @@
 """Trace request and fail-closed processing boundary."""
 from typing import Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 from navis_common.trace import Flow, expand_flows
 
 
 class TraceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    graph_build_id: UUID
-    caller_session_id: str = Field(min_length=1, max_length=255)
+    graph_build_id: UUID | None = None
+    namespace: str | None = Field(default=None, min_length=1, max_length=255)
+    caller_session_id: str = Field(default_factory=lambda: str(uuid4()), min_length=1, max_length=255)
     source: str = Field(min_length=1, max_length=16000)
     destination: str = Field(min_length=1, max_length=16000)
     protocol: str = Field(min_length=1, max_length=16)

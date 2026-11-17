@@ -37,6 +37,17 @@ class PostgresTraceSessions:
                     cur.execute("INSERT INTO navis.trace_recommendation_draft(id,trace_session_id,status) VALUES (%s,%s,'unavailable')", (uuid4(), session_id))
         return session_id
 
+    def get(self, principal, caller_session_id):
+        with self.connection_factory() as conn, conn.cursor() as cur:
+            consumer = self._consumer(cur, principal)
+            cur.execute("""SELECT id,graph_build_id,request,result FROM navis.trace_session
+                WHERE consumer_id=%s AND caller_session_id=%s AND expires_at>now()""", (consumer, caller_session_id))
+            row = cur.fetchone()
+            if row is None:
+                raise LookupError("session not found or expired")
+            return {"trace_session_id": str(row[0]), "caller_session_id": caller_session_id,
+                    "graph_build_id": str(row[1]), "request": row[2], "result": row[3]}
+
     def recommendations(self, principal, caller_session_id):
         with self.connection_factory() as conn:
             with conn.cursor() as cur:

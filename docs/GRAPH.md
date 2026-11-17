@@ -1,10 +1,15 @@
 # Draft graph builder
 
-`navis_api.graph_builder.build_graph(connection_factory, dataset_id)` builds a persistent Apache AGE graph per build, from an explicitly populated `graph_dataset_snapshot`. Apply migrations 001–006 and install a compatible PostgreSQL/AGE extension before use. Each graph contains device, snapshot-specific interface and route vertices; device/interface, device/route, route/outgoing-interface, and declared interface-to-interface link relationships. Graph properties reference relational UUIDs so route attributes, provenance and completeness remain in PostgreSQL.
+The API now orchestrates incremental namespace builds, named IP-selected views,
+and on-demand trace builds. See [topology workflow](TOPOLOGY_WORKFLOW.md) and
+apply migration 018. The older operational notes below describe the original
+builder and its remaining graph semantics limitations.
 
-`graph_config` controls inclusion of manual and discovered declared links. `topology_link` and its endpoints store the authoritative connection data; application membership remains relational. The build records its selected snapshots and never changes when new data arrives. After ingestion, explicitly update the dataset and build a new graph; automatic rebuild scheduling and ingestion integration are not implemented. Older graphs remain until a retention mechanism is built.
+`navis_api.graph_builder.build_graph(connection_factory, dataset_id)` builds a persistent Apache AGE graph per build, from an explicitly populated `graph_dataset_snapshot`. Apply all migrations through 018 and install a compatible PostgreSQL/AGE extension before use. Each graph contains device, snapshot-specific interface and route vertices; device/interface, device/route, route/outgoing-interface, and declared interface-to-interface link relationships. Graph properties reference relational UUIDs so route attributes, provenance and completeness remain in PostgreSQL.
 
-This is a draft: it does not derive links from MAC or neighbor observations, create segment links, construct application views, or evaluate reachability. A route edge is evidence of an outgoing interface, not an unconditional route. An earlier version built successfully against a local AGE instance; reconciliation and the three-device fixture still need live verification. Inspect dataset coverage and time consistency before relying on a graph.
+`graph_config` controls inclusion of manual and discovered declared links. `topology_link` and its endpoints store declared connection data; application membership remains relational. The build records its selected snapshots and never changes when new data arrives. The API creates a new dataset/build after ingestion; direct Python builder callers still supply their own dataset. Older graphs remain until a retention mechanism is built.
+
+This is a draft: it does not derive links from MAC or neighbor observations, create segment links, derive complete application semantics or evaluate reachability. The topology API adds IP-selected candidate views. A route edge is evidence of an outgoing interface, not an unconditional route. An earlier version built successfully against a local AGE instance; reconciliation and the three-device fixture still need live verification. Inspect dataset coverage and time consistency before relying on a graph.
 
 `examples/three-device-graph.sql` provides an isolated three-device fixture with two manual links and routes. It tests graph structure, not reachability or policy evaluation. It uses fixed IDs and is intended to be loaded once into a test database.
 

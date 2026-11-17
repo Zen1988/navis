@@ -97,9 +97,9 @@ legacy static-token mode until the operator makes these changes.
 
 | Scope | API operation | Further requirement |
 | --- | --- | --- |
-| `inventory:write` | `POST /v1/ingestions` | Source permission; later processing is an operator handoff |
+| `inventory:write` | `POST /v1/ingestions` | Source permission; background normalization/build attempted after acceptance |
 | `graph:read` | `GET /v1/graph-builds/{build_id}/graph` | Completed build and access to all selected sources |
-| `analysis:run` | `POST /v1/traces` | Completed build and access to all selected sources |
+| `analysis:run` | `POST /v1/traces` | Build optional; namespace selection and source permission required |
 | `analysis:read` | `GET /v1/trace-sessions/{caller_session_id}/recommendations` | Consumer owns an unexpired session |
 | `application:read` | `GET /v1/applications` | Storage is not implemented; currently returns 503 |
 
@@ -147,7 +147,7 @@ Accept: application/json
 
 This Python example uses only the standard library. Inject the environment
 values from a secret manager; do not hardcode credentials. `NAVIS_BUILD_ID`
-must identify a real completed build provided by the operator.
+must identify a real completed build obtained from `GET /v1/graph-builds`, `POST /v1/topologies`, a trace response, or the operator. This graph-read example uses an existing build; tracing can omit the build ID.
 
 ```python
 import base64
@@ -211,8 +211,14 @@ requires replacement and revocation; client secrets do not expire automatically.
 
 ## 7. Complete the data integration
 
-Successful authentication does not prepare inventory or graph builds. Agree
-with the operator on device mappings, worker execution, adapter approval,
-dataset selection, completed build IDs and supported evidence limitations.
+Successful authentication alone does not prepare inventory. Agree with the
+operator on device mappings, adapter approval, migrations through 018 and
+supported evidence limitations. Ingestion then attempts normalization and a
+namespace build automatically. Use `POST /v1/topologies` for an explicit refresh
+or named IP-selected view, `GET /v1/graph-builds` to list accessible builds, and
+`POST /v1/traces` with an optional build ID. Omit the caller session ID to generate
+one; retrieve the saved graph/result through
+`GET /v1/trace-sessions/{caller_session_id}/graph` with `analysis:read` and current
+database analysis permission. See [the topology workflow](TOPOLOGY_WORKFLOW.md).
 Continue with the [integration lifecycle and payload reference](INTEGRATION_API.md).
 Health readiness alone does not prove the data pipeline is ready.
