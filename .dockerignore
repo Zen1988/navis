@@ -9,4 +9,6 @@ navis-secret.env
 .test-tmp
 *.dump
 backups
+build
+dist
 *.egg-info

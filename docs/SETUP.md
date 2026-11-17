@@ -3,6 +3,10 @@
 Run commands from the repository root. The same OCI image works with Docker,
 Podman and Kubernetes; there is no separate Kubernetes image.
 
+For a complete rootless Podman build and database/application upgrade, follow
+[the Podman guide](PODMAN.md). It covers the `/home/zen/navis` checkout, backup
+permissions and SELinux mounts, migrations, replacing the container and rollback.
+
 ## Platform
 
 The Dockerfile uses Ubuntu 26.04 LTS (Resolute Raccoon) and its distribution

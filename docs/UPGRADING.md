@@ -29,16 +29,21 @@ use its runtime role. Protect environment files and backups as sensitive data.
 
 ## Container toolkit
 
-From the repository root, on Linux with Docker (replace `docker` with `podman`
-for the corresponding Podman workflow):
+For rootless Podman on Linux, use the complete
+[Podman build/upgrade sequence](PODMAN.md), including SELinux backup mounts,
+UID mapping and container replacement. The Docker/Compose examples below are
+for Docker; replacing the word `docker` does not turn Compose into Podman.
+
+Use the tagged v0.1.0 checkout (git fetch origin --tags, then git switch --detach v0.1.0). From that repository root, on Linux with Docker:
 
 ```bash
-docker build --pull -t navis:topology-lifecycle .
+docker build --pull --build-arg NAVIS_VERSION=0.1.0 \
+  --build-arg VCS_REF="$(git rev-parse HEAD)" -t navis:0.1.0 .
 mkdir -p backups
 docker compose stop navis
 
 docker run --rm --env-file .env.maintenance --entrypoint python \
-  navis:topology-lifecycle -m navis_api.migrate plan
+  navis:0.1.0 -m navis_api.migrate plan
 ```
 
 `.env.maintenance` supplies `NAVIS_DATABASE_URL` for the maintenance role. The
@@ -59,7 +64,7 @@ actual verified baseline, not whichever number appears in this example.
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" --env-file .env.maintenance \
   --mount type=bind,src="$PWD/backups",dst=/backups --entrypoint python \
-  navis:topology-lifecycle -m navis_api.migrate adopt --through 17 --backup-dir /backups
+  navis:0.1.0 -m navis_api.migrate adopt --through 17 --backup-dir /backups
 ```
 
 `adopt` checks expected tables/views/added columns and records the selected SQL
@@ -76,10 +81,10 @@ exists, `adopt` refuses to overwrite it.
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" --env-file .env.maintenance \
   --mount type=bind,src="$PWD/backups",dst=/backups --entrypoint python \
-  navis:topology-lifecycle -m navis_api.migrate apply --backup-dir /backups
+  navis:0.1.0 -m navis_api.migrate apply --backup-dir /backups
 
 docker run --rm --env-file .env.maintenance --entrypoint python \
-  navis:topology-lifecycle -m navis_api.migrate plan
+  navis:0.1.0 -m navis_api.migrate plan
 ```
 
 The image's default user is UID 10001. The examples above run one-off maintenance
@@ -92,7 +97,7 @@ the Linux `--user` flag and bind a directory writable by the container:
 New-Item -ItemType Directory -Force backups | Out-Null
 docker run --rm --env-file .env.maintenance `
   --mount "type=bind,src=$((Resolve-Path backups).Path),dst=/backups" `
-  --entrypoint python navis:topology-lifecycle `
+  --entrypoint python navis:0.1.0 `
   -m navis_api.migrate apply --backup-dir /backups
 if ($LASTEXITCODE -ne 0) { throw 'Database upgrade failed; keep the API stopped' }
 ```
@@ -105,7 +110,7 @@ not a distributed application maintenance lock: stop application writers first.
 For Compose, after a successful upgrade:
 
 ```bash
-docker tag navis:topology-lifecycle navis:local
+docker tag navis:0.1.0 navis:local
 docker compose up -d --no-build --force-recreate navis
 docker compose logs --tail=100 navis
 ```

@@ -9,12 +9,13 @@ from functools import partial
 from uuid import uuid4
 
 from navis_common.auth import DenyAllVerifier, Principal
+from navis_common.version import VERSION
 from .ingestion import Ingestion, UnavailableProcessor
 from .trace import TraceRequest, UnavailableTraceProcessor
 from .nauth import issue_token
 from .topology import TopologyRequest
 
-app = FastAPI(title="Navis API", version="0.1.0")
+app = FastAPI(title="Navis API", version=VERSION)
 app.state.token_verifier = DenyAllVerifier()
 app.state.ingestion_processor = UnavailableProcessor()
 app.state.graph_reader = None

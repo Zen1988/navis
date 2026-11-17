@@ -1,6 +1,6 @@
 # Project status and continuation guide
 
-Current checks: 317 unit/API tests run, one database-dependent test skipped; generated contract checks cover nine request examples, three response fixtures and 19 API paths. The new SQL statements/migrations were also syntax-checked with a PostgreSQL parser. Docker/AGE deployment, backup restore and live retention remain unverified. Migration 021 adds collection expected/input/processed counts and failure diagnostics; see [ingestion progress](INGESTION_PROGRESS.md).
+Current checks: 318 unit/API tests run, one database-dependent test skipped; generated contract checks cover nine request examples, three response fixtures and 19 API paths. The new SQL statements/migrations were also syntax-checked with a PostgreSQL parser. Docker/AGE deployment, backup restore and live retention remain unverified. Migration 021 adds collection expected/input/processed counts and failure diagnostics; see [ingestion progress](INGESTION_PROGRESS.md).
 
 Named topologies now have stable consumer/namespace-scoped names, server/IP member
 lists, version history and comparison. Unchanged network content retains its

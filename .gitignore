@@ -9,3 +9,5 @@ navis-secret.env
 *.dump
 /backups/
 .test-tmp/
+build/
+dist/
