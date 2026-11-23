@@ -2,6 +2,8 @@
 
 Start with the [setup guide](../docs/SETUP.md) for Ubuntu builds, Compose, Red Hat/Podman and Kubernetes commands.
 
+Provision the [maintenance database login and AGE backup grants](../docs/DATABASE_ROLES.md) before applying migrations.
+
 For the built-in NAuth issuer, local client provisioning and a shared
 multi-pod instance identity, see [security setup](../docs/SECURITY.md).
 The static-token instructions and manifest below remain an isolated legacy test configuration.

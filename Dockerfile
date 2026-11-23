@@ -1,5 +1,5 @@
 FROM docker.io/library/ubuntu:26.04
-ARG NAVIS_VERSION=0.1.0
+ARG NAVIS_VERSION=0.1.1
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="Navis" \
     org.opencontainers.image.version="${NAVIS_VERSION}" \

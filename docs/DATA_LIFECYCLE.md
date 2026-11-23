@@ -105,7 +105,7 @@ In a container:
 
 ```bash
 docker run --rm --env-file .env.maintenance --entrypoint python \
-  navis:0.1.0 -m navis_api.retention --namespace lab
+  navis:0.1.1 -m navis_api.retention --namespace lab
 ```
 
 After validating the preview and backup/restore procedure, schedule the `--apply`

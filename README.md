@@ -15,7 +15,7 @@ Navis is a vendor-neutral connectivity intelligence engine designed to analyze, 
 
 For the current development status, known gaps and next steps, see [Project status](docs/STATUS.md). The project remains a prototype and the vision below is not a claim that all capabilities are complete.
 
-The first tagged release is [v0.1.0](https://github.com/Zen1988/navis/releases/tag/v0.1.0). See the [changelog](CHANGELOG.md) and [versioning policy](docs/RELEASING.md).
+The latest release is [v0.1.1](https://github.com/Zen1988/navis/releases/tag/v0.1.1). See the [changelog](CHANGELOG.md) and [versioning policy](docs/RELEASING.md).
 
 For installation, Ubuntu image builds, Docker/Podman and Kubernetes, see the [setup guide](docs/SETUP.md).
 

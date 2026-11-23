@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-11-23
+
+- Add Kubernetes maintenance setup and launcher scripts for CloudNativePG.
+- Document maintenance ownership and provide AGE backup grants for the catalog and graph schemas.
+- Keep database compatibility through migration 021.
+
 ## [0.1.0] - 2026-11-17
 
 First tagged development release. See the [release notes](docs/releases/v0.1.0.md).
@@ -17,3 +23,4 @@ This release remains a prototype with incomplete vendor/network semantics; it
 does not establish arbitrary end-to-end reachability or production readiness.
 
 [0.1.0]: https://github.com/Zen1988/navis/releases/tag/v0.1.0
+[0.1.1]: https://github.com/Zen1988/navis/releases/tag/v0.1.1

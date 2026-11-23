@@ -86,6 +86,9 @@ Create a dedicated database with a compatible PostgreSQL/Apache AGE installation
 install/enable AGE separately. The application image contains no database server.
 The current API requires migrations **001–021**.
 
+Before running migrations, provision the dedicated login, schema ownership and
+AGE backup grants in the [database role setup](DATABASE_ROLES.md).
+
 For both new installations and upgrades, use the [upgrade toolkit](UPGRADING.md).
 It creates a checked backup, tracks SQL file checksums in
 `navis.schema_migration`, and applies each pending migration transactionally:

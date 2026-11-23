@@ -16,12 +16,12 @@ directory.
 cd /home/zen/navis
 git status --short
 git fetch origin --tags
-git switch --detach v0.1.0
+git switch --detach v0.1.1
 git log -1 --oneline
 podman --version
 
-NAVIS_RELEASE_IMAGE=localhost/navis:0.1.0
-podman build --pull=always --build-arg NAVIS_VERSION=0.1.0 \
+NAVIS_RELEASE_IMAGE=localhost/navis:0.1.1
+podman build --pull=always --build-arg NAVIS_VERSION=0.1.1 \
   --build-arg VCS_REF="$(git rev-parse HEAD)" -t "$NAVIS_RELEASE_IMAGE" .
 podman image inspect "$NAVIS_RELEASE_IMAGE" --format '{{.Id}}'
 ```
@@ -57,6 +57,9 @@ touch .env.maintenance
 chmod 600 .env.maintenance
 vi .env.maintenance
 ```
+
+Provision this login and its AGE backup grants using the
+[database role setup](DATABASE_ROLES.md) before running `adopt` or `apply`.
 
 Its required entry is a maintenance-role connection string:
 

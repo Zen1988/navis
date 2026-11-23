@@ -15,7 +15,8 @@ fails clearly when the version/audit tables are missing.
 1. Save the running application image tag/digest and database/AGE versions.
 2. Build the new image under a new tag; keep the previous image available.
 3. Stop API writers, ingestion workers and retention jobs for the upgrade window.
-4. Run the read-only migration plan. Adopt a known legacy baseline if required.
+4. Verify [maintenance ownership and backup grants](DATABASE_ROLES.md), then run
+   the read-only migration plan. Adopt a known legacy baseline if required.
 5. Run `apply`. The toolkit requires a backup directory, creates a custom-format
    `pg_dump`, checks that `pg_restore` can read it, and then applies pending SQL.
 6. Restart the API with the new image. Validate health, authentication and a
@@ -34,16 +35,16 @@ For rootless Podman on Linux, use the complete
 UID mapping and container replacement. The Docker/Compose examples below are
 for Docker; replacing the word `docker` does not turn Compose into Podman.
 
-Use the tagged v0.1.0 checkout (git fetch origin --tags, then git switch --detach v0.1.0). From that repository root, on Linux with Docker:
+Use the tagged v0.1.1 checkout (git fetch origin --tags, then git switch --detach v0.1.1). From that repository root, on Linux with Docker:
 
 ```bash
-docker build --pull --build-arg NAVIS_VERSION=0.1.0 \
-  --build-arg VCS_REF="$(git rev-parse HEAD)" -t navis:0.1.0 .
+docker build --pull --build-arg NAVIS_VERSION=0.1.1 \
+  --build-arg VCS_REF="$(git rev-parse HEAD)" -t navis:0.1.1 .
 mkdir -p backups
 docker compose stop navis
 
 docker run --rm --env-file .env.maintenance --entrypoint python \
-  navis:0.1.0 -m navis_api.migrate plan
+  navis:0.1.1 -m navis_api.migrate plan
 ```
 
 `.env.maintenance` supplies `NAVIS_DATABASE_URL` for the maintenance role. The
@@ -64,7 +65,7 @@ actual verified baseline, not whichever number appears in this example.
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" --env-file .env.maintenance \
   --mount type=bind,src="$PWD/backups",dst=/backups --entrypoint python \
-  navis:0.1.0 -m navis_api.migrate adopt --through 17 --backup-dir /backups
+  navis:0.1.1 -m navis_api.migrate adopt --through 17 --backup-dir /backups
 ```
 
 `adopt` checks expected tables/views/added columns and records the selected SQL
@@ -81,10 +82,10 @@ exists, `adopt` refuses to overwrite it.
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" --env-file .env.maintenance \
   --mount type=bind,src="$PWD/backups",dst=/backups --entrypoint python \
-  navis:0.1.0 -m navis_api.migrate apply --backup-dir /backups
+  navis:0.1.1 -m navis_api.migrate apply --backup-dir /backups
 
 docker run --rm --env-file .env.maintenance --entrypoint python \
-  navis:0.1.0 -m navis_api.migrate plan
+  navis:0.1.1 -m navis_api.migrate plan
 ```
 
 The image's default user is UID 10001. The examples above run one-off maintenance
@@ -97,7 +98,7 @@ the Linux `--user` flag and bind a directory writable by the container:
 New-Item -ItemType Directory -Force backups | Out-Null
 docker run --rm --env-file .env.maintenance `
   --mount "type=bind,src=$((Resolve-Path backups).Path),dst=/backups" `
-  --entrypoint python navis:0.1.0 `
+  --entrypoint python navis:0.1.1 `
   -m navis_api.migrate apply --backup-dir /backups
 if ($LASTEXITCODE -ne 0) { throw 'Database upgrade failed; keep the API stopped' }
 ```
@@ -110,7 +111,7 @@ not a distributed application maintenance lock: stop application writers first.
 For Compose, after a successful upgrade:
 
 ```bash
-docker tag navis:0.1.0 navis:local
+docker tag navis:0.1.1 navis:local
 docker compose up -d --no-build --force-recreate navis
 docker compose logs --tail=100 navis
 ```
