@@ -4,6 +4,8 @@ Start with the [setup guide](../docs/SETUP.md) for Ubuntu builds, Compose, Red H
 
 Provision the [maintenance database login and AGE backup grants](../docs/DATABASE_ROLES.md) before applying migrations.
 
+For an existing Kubernetes deployment, use the [CloudNativePG upgrade runbook](../docs/UPGRADING.md#upgrade-on-kubernetes-with-cloudnativepg) to load the release image, run migrations in the maintenance pod, and restore the API replicas.
+
 For the built-in NAuth issuer, local client provisioning and a shared
 multi-pod instance identity, see [security setup](../docs/SECURITY.md).
 The static-token instructions and manifest below remain an isolated legacy test configuration.

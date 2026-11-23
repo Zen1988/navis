@@ -104,7 +104,7 @@ podman run --rm --env-file .env.maintenance --entrypoint python \
 If Navis actually runs in Kubernetes, stop/scale those writers instead; a host
 named `k8s` alone does not mean this Podman container is the deployed API. Local
 Podman images are not automatically deployed to Kubernetes nodes. See the
-[Kubernetes setup](SETUP.md#4-kubernetes-on-red-hat-or-other-linux-hosts).
+[Kubernetes upgrade runbook](UPGRADING.md#upgrade-on-kubernetes-with-cloudnativepg).
 
 ### Only for a verified legacy database without a ledger
 

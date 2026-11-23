@@ -116,10 +116,78 @@ docker compose up -d --no-build --force-recreate navis
 docker compose logs --tail=100 navis
 ```
 
-For Kubernetes, scale the API down, run the same command in a maintenance Job
-using the new image plus a writable backup volume/maintenance secret, and wait
-for its successful completion before updating/scaling the Deployment. Migration
-commands must not run as an init container on every API replica.
+## Upgrade on Kubernetes with CloudNativePG
+
+Use the [database role setup](DATABASE_ROLES.md#cloudnativepg-host-scripts) to
+prepare the maintenance login and environment file. The database URL should use
+the CloudNativePG read-write Service, such as `navis-postgres-rw.navis:5432`.
+The maintenance pod connects through cluster DNS, so a host port-forward is
+unnecessary. Use the same namespace for all commands below.
+
+Push the image to a registry your nodes can pull from, or preload it on every
+eligible node. For a containerd cluster using node-local images, build the new
+tag with [Podman](PODMAN.md), then save and import that exact tag. Run the import
+on each eligible node against the containerd instance used by kubelet:
+
+```bash
+podman save --format docker-archive -o navis-0.1.1.tar localhost/navis:0.1.1
+sudo ctr -n k8s.io images import navis-0.1.1.tar
+sudo ctr -n k8s.io images ls | grep -F 'localhost/navis:0.1.1'
+```
+
+Run the launcher with the image reference you actually published or preloaded:
+
+```bash
+export NAVIS_K8S_NAMESPACE=navis
+image=localhost/navis:0.1.1
+bash deploy/kubernetes/start-maintenance.sh "$image" .env.maintenance
+```
+
+The launcher runs `plan`. If the pod is waiting, check its Events with
+`kubectl describe pod navis-maintenance -n "$NAVIS_K8S_NAMESPACE"`.
+`InvalidImageName` means the reference is malformed. `ImagePullBackOff` means
+the node could not pull the image. Check the exact tag in the node's image
+store when using a local import. If `navis_api.migrate` is missing after an
+image update, check the running image and run the module's `--help` before
+retrying. A Ready condition can briefly describe the previous container.
+
+Save the deployed replica count and stop the API and other writers before
+making database changes:
+
+```bash
+replicas=$(kubectl get deployment/navis -n "$NAVIS_K8S_NAMESPACE" \
+  -o jsonpath='{.spec.replicas}')
+kubectl scale deployment/navis -n "$NAVIS_K8S_NAMESPACE" --replicas=0
+kubectl rollout status deployment/navis -n "$NAVIS_K8S_NAMESPACE" --timeout=120s
+
+migrate() {
+  kubectl exec -n "$NAVIS_K8S_NAMESPACE" navis-maintenance -c maintenance -- \
+    python -m navis_api.migrate "$@"
+}
+migrate plan
+```
+
+Wait for API pods and other writers to stop. For a legacy database with a
+confirmed 001–017 baseline and `baseline_required: true`, run
+`migrate adopt --through 17 --backup-dir /backups` and check `migrate plan`
+again. Select the actual baseline if yours differs. For a fresh database or a
+database with a ledger, start from its plan. Run
+`migrate apply --backup-dir /backups` when migrations are pending. If `pg_dump`
+reports `ag_catalog` permission errors, use the [AGE grant script](DATABASE_ROLES.md)
+with the maintenance login, then retry after checking the plan.
+
+After the final plan shows `pending: []`, update the API image and restore the
+replica count. The sample manifest uses `navis` as the container name:
+
+```bash
+kubectl set image deployment/navis -n "$NAVIS_K8S_NAMESPACE" navis="$image" &&
+kubectl scale deployment/navis -n "$NAVIS_K8S_NAMESPACE" --replicas="$replicas" &&
+kubectl rollout status deployment/navis -n "$NAVIS_K8S_NAMESPACE" --timeout=120s
+```
+
+Check readiness and make an authenticated request before resuming ingestion.
+Keep the backup PVC for rollback. When maintenance is finished, you can delete
+the temporary pod to stop serving the maintenance credentials inside it.
 
 ## Checkout toolkit
 
